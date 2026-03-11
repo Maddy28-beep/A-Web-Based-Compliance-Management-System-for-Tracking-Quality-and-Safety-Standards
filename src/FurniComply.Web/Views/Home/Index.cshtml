@@ -1,0 +1,79 @@
+@using Microsoft.AspNetCore.Identity
+@inject SignInManager<FurniComply.Infrastructure.Identity.ApplicationUser> SignInManager
+
+@{
+    ViewData["Title"] = "FurniComply";
+    var isAuthenticated = User.Identity?.IsAuthenticated ?? false;
+}
+
+<div class="landing-page-wrapper">
+    <div class="landing-page" id="maincontent">
+        <nav class="landing-nav">
+            <div class="landing-nav-left">
+                <a href="/" class="landing-nav-brand">
+                    <img src="/images/logo.png" alt="FurniComply Logo" class="brand-logo-img" />
+                    <span>FurniComply</span>
+                </a>
+            </div>
+            <div class="landing-nav-center">
+                <a href="#features">Why FurniComply</a>
+                <a href="#features">Control Flow</a>
+                <a href="#features">Governance</a>
+                <a href="#features">Trust Evidence</a>
+            </div>
+            <div class="landing-nav-right">
+                @if (isAuthenticated)
+                {
+                    <a class="btn-nav-demo" href="/Home/Dashboard">Go to Dashboard</a>
+                }
+                else
+                {
+                    <a class="btn-nav-demo" href="/Home/Login">Sign In</a>
+                }
+            </div>
+        </nav>
+
+        <section class="landing-hero">
+            <div class="landing-hero-container">
+                <div class="landing-hero-content">
+                    <h1>Decisions You Can Trust<br />Compliance You Can Prove</h1>
+                    <p class="lede">A governance-driven platform for furniture manufacturing that delivers full traceability, accountability, and audit assurance.</p>
+                    <div class="hero-actions">
+                        @if (!isAuthenticated)
+                        {
+                            <a class="btn-hero-assessment" href="/Home/RequestAccess">Request Access</a>
+                            <a class="btn-hero-demo" href="#features">View Features</a>
+                        }
+                        else
+                        {
+                            <a class="btn-hero-assessment" href="/Home/Dashboard">Open Dashboard</a>
+                        }
+                    </div>
+                </div>
+                <div class="landing-hero-graphic">
+                    <div class="shield-graphic-large"></div>
+                </div>
+            </div>
+        </section>
+
+        <section id="features" class="features-section">
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="feature-icon"><i class="fa-solid fa-shield-halved"></i></div>
+                    <h3>Compliance Visibility</h3>
+                    <p>See policy checks, supplier risk posture, CAPA progress, and reporting readiness in one trusted workspace.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon"><i class="fa-solid fa-gears"></i></div>
+                    <h3>Controlled Regulatory Workflow</h3>
+                    <p>Move from draft to submission with rule-based gates, role authority checks, and consistent approval control.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon"><i class="fa-solid fa-file-contract"></i></div>
+                    <h3>Audit-Ready Reporting</h3>
+                    <p>Capture timestamped user actions, approval paths, and override reasons to support internal and external review.</p>
+                </div>
+            </div>
+        </section>
+    </div>
+</div>

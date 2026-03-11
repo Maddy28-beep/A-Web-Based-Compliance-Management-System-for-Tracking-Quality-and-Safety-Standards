@@ -1,0 +1,54 @@
+@model FurniComply.Domain.Entities.RegulatoryReport
+
+@{
+    ViewData["Title"] = "Edit Report";
+}
+
+<header class="page-header">
+    <div>
+        <p class="eyebrow">Regulatory Reporting</p>
+        <h1>Edit Report</h1>
+        <p class="lede">Update report details and submission status.</p>
+        <div class="page-meta" aria-label="Page context">
+            <span class="meta-pill"><i class="fa-solid fa-clock"></i> Dates shown in local time</span>
+        </div>
+    </div>
+    <div class="page-header-actions">
+        <a class="btn btn-outline-secondary" asp-action="Details" asp-route-id="@Model.Id"><i class="fa-solid fa-arrow-left"></i> Back</a>
+    </div>
+</header>
+
+<div class="form-card">
+    <form asp-action="Edit" method="post">
+        <input type="hidden" asp-for="Id" />
+        <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+        <div class="form-grid">
+            <label>Report Type
+                <select asp-for="ReportType" asp-items="ViewBag.ReportTypeOptions"></select>
+                <span asp-validation-for="ReportType" class="text-danger"></span>
+            </label>
+            <label>Supplier
+                <select asp-for="SupplierId" asp-items="ViewBag.SupplierId"></select>
+                <span asp-validation-for="SupplierId" class="text-danger"></span>
+                <div class="field-help">Required for supplier-specific reports. Internal reports can be organization-wide.</div>
+            </label>
+            <label>Period Start (Local time)
+                <input asp-for="PeriodStartUtc" type="date" />
+                <span asp-validation-for="PeriodStartUtc" class="text-danger"></span>
+            </label>
+            <label>Period End (Local time)
+                <input asp-for="PeriodEndUtc" type="date" />
+                <span asp-validation-for="PeriodEndUtc" class="text-danger"></span>
+            </label>
+        </div>
+        <label>Summary
+            <textarea asp-for="Summary" rows="5"></textarea>
+            <span asp-validation-for="Summary" class="text-danger"></span>
+            <div class="field-help">Keep this concise—used in exports and the approval view.</div>
+        </label>
+        <div class="form-actions">
+            <button class="btn btn-success" type="submit">Save Draft</button>
+            <a class="btn btn-outline-secondary" asp-action="Details" asp-route-id="@Model.Id">Cancel</a>
+        </div>
+    </form>
+</div>

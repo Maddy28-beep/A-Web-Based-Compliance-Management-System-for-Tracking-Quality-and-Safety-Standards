@@ -1,0 +1,467 @@
+@model FurniComply.Web.Models.LoginViewModel
+@{
+    Layout = null;
+}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <title>Sign In - FurniComply</title>
+    <link rel="preload" as="image" href="/images/loginpage-optimized.jpg?v=20260304a" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,700&display=swap" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet" />
+    <style>
+        :root {
+            --ink: #2f1f17;
+            --ink-soft: #59453a;
+            --field: rgba(255, 255, 255, 0.45);
+            --field-focus: rgba(255, 255, 255, 0.7);
+            --glass: rgba(255, 255, 255, 0.72);
+            --glass-line: rgba(255, 255, 255, 0.40);
+            --accent: #1f5a45;
+            --accent-light: #2b8a5a;
+            --button: linear-gradient(135deg, #1f5a45 0%, #2b8a5a 100%);
+            --button-hover: linear-gradient(135deg, #174a38 0%, #238a50 100%);
+            --shadow: 0 24px 64px rgba(19, 14, 10, 0.30), 0 8px 20px rgba(19, 14, 10, 0.12);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            min-height: 100vh;
+            min-height: 100dvh;
+            overflow: hidden;
+            font-family: "Manrope", sans-serif;
+            color: var(--ink);
+        }
+
+        body {
+            background:
+                linear-gradient(rgba(26, 16, 12, 0.28), rgba(26, 16, 12, 0.28)),
+                url('/images/loginpage-optimized.jpg?v=20260304a') center center / cover no-repeat;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 12px;
+        }
+
+        .auth-wrap {
+            width: min(460px, 100%);
+            animation: fadeSlideUp 0.5s ease-out;
+        }
+
+        @@keyframes fadeSlideUp {
+            from { opacity: 0; transform: translateY(18px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .auth-card {
+            border-radius: 24px;
+            background: var(--glass);
+            border: 1px solid var(--glass-line);
+            backdrop-filter: blur(20px) saturate(1.2);
+            -webkit-backdrop-filter: blur(20px) saturate(1.2);
+            box-shadow: var(--shadow);
+            padding: 1.5rem 1.75rem 1.2rem;
+        }
+
+        @@supports not (backdrop-filter: blur(1px)) {
+            .auth-card {
+                background: rgba(255, 255, 255, 0.97);
+            }
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .brand img {
+            width: 44px;
+            height: 44px;
+            object-fit: contain;
+        }
+
+        .brand span {
+            font-size: 1.4rem;
+            font-weight: 800;
+            color: #2b1c15;
+            letter-spacing: -0.01em;
+        }
+
+        h1 {
+            margin: 0 0 0.15rem;
+            font-family: "Fraunces", serif;
+            font-size: clamp(1.9rem, 2.4vw, 2.4rem);
+            line-height: 1.08;
+            letter-spacing: -0.02em;
+            color: #1f2a22;
+        }
+
+        .lede {
+            margin: 0 0 1rem;
+            font-size: 0.9rem;
+            color: #5f4a3f;
+            line-height: 1.35;
+        }
+
+        .form-divider {
+            height: 1px;
+            background: rgba(47, 31, 23, 0.08);
+            margin: 0 0 0.9rem;
+            border: none;
+        }
+
+        .field {
+            margin-bottom: 0.75rem;
+        }
+
+        .field label {
+            display: block;
+            margin-bottom: 0.4rem;
+            font-size: 0.88rem;
+            font-weight: 700;
+            color: #2e1f18;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .field-wrap {
+            position: relative;
+        }
+
+        .field-wrap .icon {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #2d2019;
+            font-size: 1rem;
+            pointer-events: none;
+            transition: color 0.2s;
+            z-index: 2;
+        }
+
+        .field-wrap input {
+            width: 100%;
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            border-radius: 12px;
+            background: var(--field);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            padding: 0.75rem 1rem 0.75rem 2.6rem;
+            font-size: 0.95rem;
+            color: #2e2019;
+            outline: none;
+            transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+        }
+
+        .field-wrap input:focus {
+            border-color: var(--accent);
+            background: var(--field-focus);
+            box-shadow: 0 0 0 3px rgba(31, 90, 69, 0.12);
+        }
+
+        .field-wrap input:focus ~ .icon {
+            color: var(--accent);
+        }
+
+        .field-wrap input::placeholder {
+            color: #a09a96;
+            font-weight: 500;
+        }
+
+        .field-wrap.has-toggle input {
+            padding-right: 2.8rem;
+        }
+
+        .password-toggle {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            border: 0;
+            background: transparent;
+            color: #8b8581;
+            font-size: 1rem;
+            cursor: pointer;
+            line-height: 1;
+            transition: color 0.2s;
+        }
+
+        .password-toggle:hover {
+            color: var(--accent);
+        }
+
+        .meta-row {
+            margin: 0.6rem 0 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 14px;
+            color: #2f2119;
+            font-size: 0.88rem;
+            font-weight: 600;
+        }
+
+        .remember {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: pointer;
+        }
+
+        .remember input {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--accent);
+            border-radius: 4px;
+        }
+
+        .forgot {
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: 700;
+        }
+
+        .forgot:hover {
+            text-decoration: underline;
+        }
+
+        .btn-submit {
+            width: 100%;
+            border: 0;
+            border-radius: 12px;
+            background: var(--button);
+            color: #fff;
+            padding: 0.65rem 1.2rem;
+            font-size: 0.98rem;
+            font-weight: 800;
+            letter-spacing: 0.02em;
+            cursor: pointer;
+            transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+            box-shadow: 0 4px 14px rgba(31, 90, 69, 0.3);
+        }
+
+        .btn-submit:hover {
+            background: var(--button-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(31, 90, 69, 0.35);
+        }
+
+        .btn-submit:active {
+            transform: translateY(0);
+        }
+
+        .secure-note {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.4rem;
+            margin-top: 0.5rem;
+            font-size: 0.75rem;
+            color: #7a6e68;
+            font-weight: 600;
+        }
+
+        .secure-note i {
+            font-size: 0.85rem;
+            color: #1f5a45;
+        }
+
+        .helper {
+            margin-top: 0.65rem;
+            text-align: center;
+            font-size: 0.82rem;
+            font-weight: 700;
+            padding-top: 0.65rem;
+            border-top: 1px solid rgba(47, 31, 23, 0.08);
+        }
+
+        .helper a {
+            color: #3a281f;
+            text-decoration: none;
+            transition: color 0.15s;
+        }
+
+        .helper a:hover {
+            color: var(--accent);
+            text-decoration: underline;
+        }
+
+        .validation {
+            color: #8a1f1f;
+            font-size: 0.88rem;
+        }
+
+        .validation:has(li) {
+            background: rgba(183, 28, 28, 0.08);
+            border-radius: 8px;
+            padding: 0.5rem 0.75rem;
+            margin-bottom: 8px;
+        }
+
+        .validation ul {
+            margin: 0;
+            padding-left: 1rem;
+        }
+
+        @@media (max-height: 700px) {
+            .auth-card { padding: 1rem 1.5rem 0.9rem; }
+            .brand { margin-bottom: 0.5rem; }
+            .brand img { width: 36px; height: 36px; }
+            .brand span { font-size: 1.15rem; }
+            h1 { font-size: 1.5rem; }
+            .lede { margin: 0 0 0.6rem; font-size: 0.85rem; }
+            .form-divider { margin: 0 0 0.6rem; }
+            .field { margin-bottom: 0.5rem; }
+            .field-wrap input { padding: 0.55rem 1rem 0.55rem 2.4rem; }
+            .meta-row { margin: 0.3rem 0 0.5rem; }
+            .btn-submit { padding: 0.5rem; }
+            .secure-note { margin-top: 0.35rem; font-size: 0.7rem; }
+            .helper { margin-top: 0.45rem; padding-top: 0.45rem; font-size: 0.78rem; }
+        }
+
+        @@media (max-width: 900px) {
+            body {
+                background-image:
+                    linear-gradient(rgba(26, 16, 12, 0.30), rgba(26, 16, 12, 0.30)),
+                    url('/images/loginpage-mobile.jpg?v=20260304a');
+                background-position: center top;
+            }
+
+            .auth-card {
+                padding: 1.25rem 1.25rem 1rem;
+                border-radius: 20px;
+            }
+
+            .brand img {
+                width: 40px;
+                height: 40px;
+            }
+
+            .brand span {
+                font-size: 1.25rem;
+            }
+
+            h1 {
+                font-size: clamp(1.6rem, 6.6vw, 2rem);
+            }
+
+            .lede {
+                font-size: 0.9rem;
+            }
+
+            .field label {
+                font-size: 0.84rem;
+            }
+
+            .field-wrap input {
+                font-size: 0.93rem;
+                padding: 0.7rem 1rem 0.7rem 2.4rem;
+            }
+        }
+
+        @@media (prefers-reduced-data: reduce) {
+            body {
+                background-image:
+                    linear-gradient(rgba(26, 16, 12, 0.30), rgba(26, 16, 12, 0.30)),
+                    url('/images/loginpage-mobile.jpg?v=20260304a');
+            }
+        }
+    </style>
+</head>
+<body>
+    <main class="auth-wrap">
+        <section class="auth-card">
+            <div class="brand">
+                <img src="~/images/logo.png" alt="FurniComply logo" />
+                <span>FurniComply</span>
+            </div>
+
+            <h1>Welcome Back</h1>
+            <p class="lede">Securely access your compliance management system.</p>
+
+            <hr class="form-divider" />
+
+            <form action="/Account/Login" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" asp-for="ReturnUrl" />
+                <div asp-validation-summary="All" class="validation"></div>
+
+                <div class="field">
+                    <label asp-for="Email">Email</label>
+                    <div class="field-wrap">
+                        <i class="fa-solid fa-envelope icon"></i>
+                        <input asp-for="Email" placeholder="Enter your email address" autocomplete="username" />
+                    </div>
+                </div>
+
+                <div class="field">
+                    <label asp-for="Password">Password</label>
+                    <div class="field-wrap has-toggle">
+                        <i class="fa-solid fa-lock icon"></i>
+                        <input asp-for="Password" id="login-password" type="password" placeholder="Enter your password" autocomplete="current-password" />
+                        <button type="button" class="password-toggle" id="toggle-password" aria-label="Show password">
+                            <i class="fa-regular fa-eye" id="toggle-password-icon"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="meta-row">
+                    <label class="remember" asp-for="RememberMe">
+                        <input asp-for="RememberMe" type="checkbox" />
+                        Remember me
+                    </label>
+                    <a class="forgot" href="#">Forgot your password?</a>
+                </div>
+
+                <button class="btn-submit" type="submit">
+                    Sign In <i class="fa-solid fa-arrow-right" style="margin-left:0.4rem;font-size:0.9rem;"></i>
+                </button>
+
+                <div class="secure-note">
+                    <i class="fa-solid fa-shield-halved"></i>
+                    Protected by enterprise-grade security
+                </div>
+
+                <div class="helper">
+                    <a href="/Home/Index"><i class="fa-solid fa-arrow-left"></i> Back to Home</a>
+                    <span style="margin:0 0.5rem;color:#c4bab4;">&bull;</span>
+                    <a href="/Home/RequestAccess">Request Access</a>
+                </div>
+            </form>
+        </section>
+    </main>
+
+    <script>
+        (function () {
+            const passwordInput = document.getElementById("login-password");
+            const toggleButton = document.getElementById("toggle-password");
+            const icon = document.getElementById("toggle-password-icon");
+            if (!passwordInput || !toggleButton || !icon) return;
+
+            toggleButton.addEventListener("click", function () {
+                const hidden = passwordInput.type === "password";
+                passwordInput.type = hidden ? "text" : "password";
+                icon.classList.toggle("fa-eye", !hidden);
+                icon.classList.toggle("fa-eye-slash", hidden);
+                toggleButton.setAttribute("aria-label", hidden ? "Hide password" : "Show password");
+            });
+        })();
+    </script>
+</body>
+</html>

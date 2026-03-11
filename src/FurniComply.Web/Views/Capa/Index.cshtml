@@ -1,0 +1,181 @@
+@model FurniComply.Web.ViewModels.Capa.CapaDashboardViewModel
+
+@{
+    ViewData["Title"] = "CAPA Dashboard";
+    var canManageChecks =
+        !User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.SuperAdmin) &&
+        (User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.ComplianceManager) ||
+         User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.DepartmentHead));
+    var canVerifyCompliance =
+        !User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.SuperAdmin) &&
+        User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.ComplianceManager);
+}
+
+<section class="hero">
+    <div>
+        <p class="eyebrow">Compliance Operations</p>
+        <h1>CAPA Dashboard</h1>
+        <p class="lede">Track corrective actions across open, overdue, evidence, and closed states.</p>
+    </div>
+</section>
+
+<div class="form-card">
+    <div class="capa-status-filters">
+        <a class="btn @(Model.SelectedFilter == "open" ? "btn-success" : "btn-outline-secondary")"
+           asp-action="Index"
+           asp-route-status="open"
+           asp-route-assignee="@Model.SelectedAssignee"
+           asp-route-from="@(Model.FromDate?.ToString("yyyy-MM-dd"))"
+           asp-route-to="@(Model.ToDate?.ToString("yyyy-MM-dd"))">
+            Open <span class="badge bg-light text-dark ms-1">@Model.OpenCount</span>
+        </a>
+        <a class="btn @(Model.SelectedFilter == "overdue" ? "btn-danger" : "btn-outline-secondary")"
+           asp-action="Index"
+           asp-route-status="overdue"
+           asp-route-assignee="@Model.SelectedAssignee"
+           asp-route-from="@(Model.FromDate?.ToString("yyyy-MM-dd"))"
+           asp-route-to="@(Model.ToDate?.ToString("yyyy-MM-dd"))">
+            Overdue <span class="badge bg-light text-dark ms-1">@Model.OverdueCount</span>
+        </a>
+        <a class="btn @(Model.SelectedFilter == "evidence" ? "btn-warning text-dark" : "btn-outline-secondary")"
+           asp-action="Index"
+           asp-route-status="evidence"
+           asp-route-assignee="@Model.SelectedAssignee"
+           asp-route-from="@(Model.FromDate?.ToString("yyyy-MM-dd"))"
+           asp-route-to="@(Model.ToDate?.ToString("yyyy-MM-dd"))">
+            Evidence Submitted <span class="badge bg-light text-dark ms-1">@Model.EvidenceSubmittedCount</span>
+        </a>
+        <a class="btn @(Model.SelectedFilter == "closed" ? "btn-dark" : "btn-outline-secondary")"
+           asp-action="Index"
+           asp-route-status="closed"
+           asp-route-assignee="@Model.SelectedAssignee"
+           asp-route-from="@(Model.FromDate?.ToString("yyyy-MM-dd"))"
+           asp-route-to="@(Model.ToDate?.ToString("yyyy-MM-dd"))">
+            Closed <span class="badge bg-light text-dark ms-1">@Model.ClosedCount</span>
+        </a>
+    </div>
+</div>
+
+<div class="form-card">
+    <form method="get" asp-action="Index">
+        <input type="hidden" name="status" value="@Model.SelectedFilter" />
+        <div class="form-grid">
+            <label>From Due Date
+                <input type="date" name="from" value="@(Model.FromDate?.ToString("yyyy-MM-dd"))" />
+            </label>
+            <label>To Due Date
+                <input type="date" name="to" value="@(Model.ToDate?.ToString("yyyy-MM-dd"))" />
+            </label>
+        </div>
+        <div class="hero-actions">
+            <button class="btn btn-outline-secondary" type="submit">Apply Filters</button>
+            <a class="btn btn-light" asp-action="Index" asp-route-status="@Model.SelectedFilter">Reset</a>
+        </div>
+    </form>
+</div>
+
+<style>
+    .capa-table {
+        width: 100%;
+        table-layout: fixed;
+    }
+    .capa-table th, .capa-table td {
+        overflow-wrap: anywhere;
+        white-space: normal;
+        vertical-align: middle;
+    }
+    .capa-table .cell-truncate {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .capa-table .badge {
+        white-space: nowrap;
+        font-size: .75rem;
+        padding: .35rem .55rem;
+    }
+    .capa-table td:first-child { padding-right: 2rem; }
+    .capa-table td.supplier-cell { padding-left: 2rem; }
+</style>
+
+<div class="table-card">
+    <table class="table table-hover capa-table">
+        <colgroup>
+            <col style="width:18%" />
+            <col style="width:32%" />
+            <col style="width:16%" />
+            <col style="width:18%" />
+            <col style="width:16%" />
+        </colgroup>
+        <thead>
+            <tr>
+                <th>Type</th>
+                <th>Supplier</th>
+                <th>Check Status</th>
+                <th>CAPA Status</th>
+                <th>Closed</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var item in Model.Items)
+        {
+            <tr style="cursor: pointer;" onclick="window.location.href='@Url.Action("Details","Capa", new { id = item.Id })'">
+                <td class="text-center">
+                    @if (item.IssueType == FurniComply.Domain.Enums.CorrectiveActionType.Quality)
+                    {
+                        <span class="badge bg-primary">Quality</span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-secondary">Compliance</span>
+                    }
+                </td>
+                <td class="supplier-cell"><span class="cell-truncate">@item.SupplierName</span></td>
+                <td class="text-center">
+                    @if (item.IssueType == FurniComply.Domain.Enums.CorrectiveActionType.Quality)
+                    {
+                        <span class="text-muted">-</span>
+                    }
+                    else
+                    {
+                        @if (string.Equals(item.CheckStatus, "Non-Compliant", StringComparison.OrdinalIgnoreCase))
+                        {
+                            <span class="badge bg-danger">Non-Compliant</span>
+                        }
+                        else if (string.Equals(item.CheckStatus, "Compliant", StringComparison.OrdinalIgnoreCase))
+                        {
+                            <span class="badge bg-success">Compliant</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-secondary">@item.CheckStatus</span>
+                        }
+                    }
+                </td>
+                <td class="text-center">
+                    @if (item.CapaStatus == FurniComply.Domain.Enums.CorrectiveActionStatus.Overdue)
+                    {
+                        <span class="badge bg-danger">Overdue</span>
+                    }
+                    else if (item.CapaStatus == FurniComply.Domain.Enums.CorrectiveActionStatus.EvidenceSubmitted)
+                    {
+                        <span class="badge bg-warning text-dark">Evidence Submitted</span>
+                    }
+                    else if (item.CapaStatus == FurniComply.Domain.Enums.CorrectiveActionStatus.Closed)
+                    {
+                        <span class="badge bg-dark">Closed</span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-info text-dark">@item.CapaStatus</span>
+                    }
+                </td>
+                <td class="text-center">@(item.ClosedAtUtc.HasValue ? item.ClosedAtUtc.Value.ToLocalTime().ToString("yyyy-MM-dd hh:mm tt") : "-")</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+
+@section Scripts { }

@@ -1,0 +1,39 @@
+@model FurniComply.Domain.Entities.Supplier
+
+@{
+    ViewData["Title"] = "Archive Supplier";
+}
+
+<header class="page-header">
+    <div>
+        <p class="eyebrow">Procurement</p>
+        <h1>Archive Supplier</h1>
+        <p class="lede">This archives the record and can be restored later.</p>
+        <div class="page-meta" aria-label="Page context">
+            <span class="meta-pill"><i class="fa-solid fa-triangle-exclamation"></i> Destructive action</span>
+        </div>
+    </div>
+    <div class="page-header-actions">
+        <a class="btn btn-outline-secondary" asp-action="Details" asp-route-id="@Model.Id"><i class="fa-solid fa-arrow-left"></i> Back</a>
+    </div>
+</header>
+
+<div class="form-card">
+    <h3 style="margin-top:0;">@Model.Name</h3>
+    <p class="section-meta">Status: @Model.Status · Approval: @Model.ApprovalStatus</p>
+    <form asp-action="Delete" method="post">
+        <input type="hidden" asp-for="Id" />
+        <div class="empty-state" style="margin-top: 14px;">
+            <div class="empty-state-icon"><i class="fa-solid fa-box-archive"></i></div>
+            <div>
+                <h3>Archive this supplier?</h3>
+                <p>This is a soft delete. The supplier will move to <strong>Archived</strong> and can be restored from the archived list.</p>
+                <div class="empty-state-actions">
+                    <button class="btn btn-outline-danger" type="submit"><i class="fa-solid fa-box-archive"></i> Archive</button>
+                    <a class="btn btn-outline-secondary" asp-action="Details" asp-route-id="@Model.Id">Cancel</a>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+

@@ -1,0 +1,364 @@
+@model FurniComply.Web.Models.DashboardViewModel
+
+@{
+    ViewData["Title"] = "Dashboard";
+    TimeZoneInfo tz;
+    try
+    {
+        tz = TimeZoneInfo.FindSystemTimeZoneById("Asia/Manila");
+    }
+    catch
+    {
+        try
+        {
+            tz = TimeZoneInfo.FindSystemTimeZoneById("Singapore Standard Time");
+        }
+        catch
+        {
+            tz = TimeZoneInfo.Local;
+        }
+    }
+    var localNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
+}
+
+<header class="hero">
+    <div>
+        <p class="eyebrow">Analytics</p>
+        <h1>Compliance Command Center</h1>
+        <p class="lede">Track policies, checks, suppliers, and reporting with live operational visibility.</p>
+        <div class="dash-meta">
+            <span>Last refresh: <strong>@localNow.ToString("MMM dd, yyyy hh:mm tt") PHT</strong></span>
+            <span>Region: <strong>Philippines</strong></span>
+        </div>
+    </div>
+    <div class="hero-actions">
+        <a class="btn btn-outline-secondary" href="/Policies/Create"><i class="fa-solid fa-plus"></i> New Policy</a>
+        <a class="btn btn-success btn-lg px-4" href="/ComplianceChecks/Index"><i class="fa-solid fa-play"></i> Run Check</a>
+    </div>
+</header>
+
+<section class="dash-kpis">
+    <a class="kpi-card kpi-link" href="/Policies/Index">
+        <div class="kpi-icon-wrap"><i class="fa-solid fa-chart-line"></i></div>
+        <div class="kpi-chip">Policy Management</div>
+        <div class="kpi-value">@Model.Analytics.ActivePolicies</div>
+        <div class="kpi-label">Active Policies</div>
+        <div class="kpi-trend good">Governance baseline</div>
+    </a>
+    <a class="kpi-card kpi-link" href="/ComplianceChecks/Index">
+        <div class="kpi-icon-wrap"><i class="fa-solid fa-chart-simple"></i></div>
+        <div class="kpi-chip">Compliance Monitoring</div>
+        <div class="kpi-value">@Model.Analytics.OpenNonCompliance</div>
+        <div class="kpi-label">Open Findings</div>
+        <div class="kpi-trend risk">Needs follow-up</div>
+    </a>
+    <a class="kpi-card kpi-link" href="/RegulatoryReports/Index">
+        <div class="kpi-icon-wrap"><i class="fa-solid fa-chart-pie"></i></div>
+        <div class="kpi-chip">Regulatory Reporting</div>
+        <div class="kpi-value">@Model.Analytics.OpenReports</div>
+        <div class="kpi-label">Open Reports</div>
+        <div class="kpi-trend warn">Submission flow</div>
+    </a>
+    <a class="kpi-card kpi-link" href="/ProcurementOrders/Index">
+        <div class="kpi-icon-wrap"><i class="fa-solid fa-chart-area"></i></div>
+        <div class="kpi-chip">Procurement & Suppliers</div>
+        <div class="kpi-value">@Model.Analytics.ProcurementOrdersOpen</div>
+        <div class="kpi-label">Open Orders</div>
+        <div class="kpi-trend neutral">@Model.Analytics.SuppliersOnHold suppliers on hold</div>
+    </a>
+</section>
+
+<section class="dash-grid">
+    <div class="chart-card chart-tall">
+        <div class="chart-header">
+            <div>
+                <h3>Compliance Overview <span class="grid-help" title="Compliant vs non-compliant checks ratio."><i class="fa-solid fa-circle-info"></i></span></h3>
+                <p class="chart-sub">Compliant vs non-compliant checks.</p>
+            </div>
+            <span class="tag">YTD</span>
+        </div>
+        <canvas id="complianceChart"></canvas>
+        <div class="chart-legend">
+            <span><i class="dot dot-good"></i> Compliant</span>
+            <span><i class="dot dot-risk"></i> Non-Compliant</span>
+        </div>
+        <div class="chart-metrics">
+            <div><small>Compliant</small><strong>@Model.Analytics.CompliantChecks</strong></div>
+            <div><small>Non-Compliant</small><strong>@Model.Analytics.NonCompliantChecks</strong></div>
+        </div>
+    </div>
+    <div class="chart-card">
+        <div class="chart-header">
+            <div>
+                <h3><span id="trendChartTitle">Monthly Checks</span> <span class="grid-help" title="Trend by month based on selected metric and period."><i class="fa-solid fa-circle-info"></i></span></h3>
+                <p class="chart-sub">Audit activity across the last 6 months.</p>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+                <select id="trendMetric" class="form-select form-select-sm" style="width: auto;">
+                    <option value="checks" selected>Checks</option>
+                    <option value="reports">Reports</option>
+                    <option value="orders">Orders</option>
+                </select>
+                <div class="input-group input-group-sm" style="width: auto;">
+                    <span class="input-group-text">From</span>
+                    <input type="date" id="trendFrom" class="form-control" value="@DateTime.UtcNow.AddMonths(-5).ToString("yyyy-MM-01")" />
+                </div>
+                <div class="input-group input-group-sm" style="width: auto;">
+                    <span class="input-group-text">To</span>
+                    <input type="date" id="trendTo" class="form-control" value="@DateTime.UtcNow.ToString("yyyy-MM-dd")" />
+                </div>
+                <button id="btnRefreshTrend" class="btn btn-sm btn-outline-primary"><i class="fa-solid fa-arrows-rotate"></i></button>
+            </div>
+        </div>
+        <canvas id="checksChart"></canvas>
+        <div class="chart-metrics">
+            <div><small>This month</small><strong>@Model.Analytics.ComplianceChecksThisMonth</strong></div>
+            <div><small>Open findings</small><strong>@Model.Analytics.OpenNonCompliance</strong></div>
+        </div>
+    </div>
+    <div class="chart-card chart-wide">
+        <div class="chart-header">
+            <div>
+                <h3>Procurement Activity <span class="grid-help" title="Operational volume and supplier risk indicators."><i class="fa-solid fa-circle-info"></i></span></h3>
+                <p class="chart-sub">Orders and supplier risk signals.</p>
+            </div>
+        </div>
+        <canvas id="opsChart"></canvas>
+        <div class="chart-metrics">
+            <div><small>Open orders</small><strong>@Model.Analytics.ProcurementOrdersOpen</strong></div>
+            <div><small>Suppliers on hold</small><strong>@Model.Analytics.SuppliersOnHold</strong></div>
+        </div>
+    </div>
+</section>
+
+<section class="dash-bottom">
+    <div>
+        <h3 class="dash-subtitle">External Utilities</h3>
+        <section class="widget-grid">
+            <div class="widget-card">
+                <h3>Philippine Holidays <span class="grid-help" title="Upcoming holidays that can impact operations and due dates."><i class="fa-solid fa-circle-info"></i></span></h3>
+                @if (Model.Holidays != null && Model.Holidays.Holidays.Count > 0)
+                {
+                    <ul class="widget-list" id="holiday-list">
+                        @foreach (var holiday in Model.Holidays.Holidays)
+                        {
+                            <li><span>@holiday.Date</span><strong>@holiday.Name</strong></li>
+                        }
+                    </ul>
+                }
+                else
+                {
+                    <p class="widget-meta">Holiday data unavailable.</p>
+                }
+            </div>
+            <div class="widget-card">
+                <h3>Compliance Alerts <span class="grid-help" title="Latest alert events from active workflow rules."><i class="fa-solid fa-circle-info"></i></span></h3>
+                <ul class="alert-list">
+                    @if (Model.Analytics.Alerts.Any())
+                    {
+                        @foreach (var alert in Model.Analytics.Alerts.Take(5))
+                        {
+                            var chipClass = alert.Severity switch
+                            {
+                                "Critical" => "risk",
+                                "High" => "risk",
+                                "Warning" => "warn",
+                                _ => "neutral"
+                            };
+                            var ackLabel = alert.IsAcknowledged ? "Acknowledged" : "New";
+                            var ackClass = alert.IsAcknowledged ? "good" : "neutral";
+
+                            <li>
+                                <span>@alert.Title<br /><small>@alert.Message</small></span>
+                                <span class="status-chip @chipClass">@alert.Severity</span>
+                            </li>
+                            <li class="alert-actions">
+                                <span class="status-chip @ackClass">@ackLabel</span>
+                                <form asp-action="AcknowledgeAlert" method="post">
+                                    <input type="hidden" name="id" value="@alert.Id" />
+                                    @Html.AntiForgeryToken()
+                                    <button class="btn btn-outline-secondary btn-sm" type="submit">Acknowledge</button>
+                                </form>
+                                <form asp-action="ResolveAlert" method="post">
+                                    <input type="hidden" name="id" value="@alert.Id" />
+                                    @Html.AntiForgeryToken()
+                                    <button class="btn btn-success btn-sm" type="submit">Resolve</button>
+                                </form>
+                            </li>
+                        }
+                    }
+                    else
+                    {
+                        <li>
+                            <span>No active alerts.</span>
+                            <span class="status-chip neutral">Clear</span>
+                        </li>
+                    }
+                </ul>
+                <p class="section-meta">Alerts are generated by active rules every 15 minutes.</p>
+            </div>
+        </section>
+    </div>
+    <div class="insight-card">
+        <h3>Insights <span class="grid-help" title="Quick narrative summary of notable governance signals."><i class="fa-solid fa-circle-info"></i></span></h3>
+        <ul id="insight-list">
+            @if (Model.Analytics.Insights != null && Model.Analytics.Insights.Any())
+            {
+                @foreach (var insight in Model.Analytics.Insights)
+                {
+                    <li>@insight</li>
+                }
+            }
+            else
+            {
+                <li>No specific insights available at this time.</li>
+            }
+        </ul>
+        <a class="button ghost" href="/AuditLogs/Index">View Audit Logs</a>
+    </div>
+</section>
+
+@section Scripts {
+    <script>
+        const refreshIntervalMs = 600000;
+        const holidayList = document.getElementById('holiday-list');
+
+        async function refreshWidgets() {
+            const response = await fetch('/Dashboard/Widgets?baseCurrency=USD');
+            if (!response.ok) {
+                return;
+            }
+            const data = await response.json();
+
+            if (data.holidays && holidayList) {
+                holidayList.innerHTML = '';
+                for (const holiday of data.holidays.holidays) {
+                    const li = document.createElement('li');
+                    li.innerHTML = `<span>${holiday.date}</span><strong>${holiday.name}</strong>`;
+                    holidayList.appendChild(li);
+                }
+            }
+        }
+
+        setInterval(refreshWidgets, refreshIntervalMs);
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        const complianceCtx = document.getElementById('complianceChart');
+        const opsCtx = document.getElementById('opsChart');
+        const checksCtx = document.getElementById('checksChart');
+
+        if (window.Chart) {
+            if (complianceCtx) {
+                new Chart(complianceCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Compliant', 'Non-Compliant'],
+                        datasets: [{
+                            data: [@Model.Analytics.CompliantChecks, @Model.Analytics.NonCompliantChecks],
+                            backgroundColor: ['#c1a47b', '#3d2b1f'],
+                            borderWidth: 0
+                        }]
+                    },
+                    options: {
+                        plugins: {
+                            legend: { display: false }
+                        },
+                        cutout: '65%',
+                        responsive: true,
+                        maintainAspectRatio: false
+                    }
+                });
+            }
+
+            const monthlyLabels = [@Html.Raw(string.Join(", ", Model.Analytics.ComplianceChecksByMonth.Select(m => $"'{m.Label}'")))];
+            const monthlyCounts = [@Html.Raw(string.Join(", ", Model.Analytics.ComplianceChecksByMonth.Select(m => m.Count)))];
+
+            let checksChart = null;
+            if (checksCtx) {
+                checksChart = new Chart(checksCtx, {
+                    type: 'line',
+                    data: {
+                        labels: monthlyLabels,
+                        datasets: [{
+                            data: monthlyCounts,
+                            borderColor: '#c1a47b',
+                            backgroundColor: 'rgba(193, 164, 123, 0.15)',
+                            tension: 0.35,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        plugins: { legend: { display: false } },
+                        scales: { y: { beginAtZero: true } },
+                        responsive: true,
+                        maintainAspectRatio: false
+                    }
+                });
+            }
+
+            async function loadTrendChart() {
+                if (!checksChart) return;
+
+                const metric = document.getElementById('trendMetric')?.value ?? "checks";
+                const from = document.getElementById('trendFrom')?.value;
+                const to = document.getElementById('trendTo')?.value;
+
+                let url = `/Dashboard/TrendData?metric=${metric}`;
+                if (from) url += `&from=${from}`;
+                if (to) url += `&to=${to}`;
+
+                const response = await fetch(url);
+                if (!response.ok) return;
+
+                const data = await response.json();
+                checksChart.data.labels = data.labels;
+                checksChart.data.datasets[0].data = data.values;
+                checksChart.update();
+
+                const titleEl = document.getElementById('trendChartTitle');
+                if (titleEl && data.title) {
+                    titleEl.textContent = data.title;
+                }
+            }
+
+            document.getElementById('trendMetric')?.addEventListener('change', loadTrendChart);
+            document.getElementById('trendFrom')?.addEventListener('change', loadTrendChart);
+            document.getElementById('trendTo')?.addEventListener('change', loadTrendChart);
+            document.getElementById('btnRefreshTrend')?.addEventListener('click', loadTrendChart);
+
+            if (opsCtx) {
+                new Chart(opsCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Policies', 'Reports', 'Suppliers On Hold', 'Procurement Open'],
+                        datasets: [{
+                            data: [@Model.Analytics.ActivePolicies, @Model.Analytics.OpenReports, @Model.Analytics.SuppliersOnHold, @Model.Analytics.ProcurementOrdersOpen],
+                            backgroundColor: ['#3d2b1f', '#c1a47b', '#8b7355', '#5f6b63']
+                        }]
+                    },
+                    options: {
+                        scales: {
+                            y: { beginAtZero: true }
+                        },
+                        plugins: {
+                            legend: { display: false }
+                        },
+                        responsive: true,
+                        maintainAspectRatio: false
+                    }
+                });
+            }
+        }
+    </script>
+}
+
+
+
+
+
+
+
+
+
+

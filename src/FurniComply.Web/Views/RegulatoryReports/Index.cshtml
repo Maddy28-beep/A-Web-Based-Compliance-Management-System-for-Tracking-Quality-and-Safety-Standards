@@ -1,0 +1,152 @@
+@model IEnumerable<FurniComply.Domain.Entities.RegulatoryReport>
+
+@{
+    ViewData["Title"] = "Regulatory Reports";
+    var isOperationalAdmin = User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.Admin) &&
+        !User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.SuperAdmin);
+    var canManageReports = User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.ComplianceManager) &&
+        !User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.SuperAdmin);
+    var canOverrideApproval = User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.SuperAdmin);
+    var overrideReportIds = ViewBag.OverrideReportIds as IEnumerable<Guid> ?? Enumerable.Empty<Guid>();
+}
+
+<header class="hero module-header">
+    <div>
+        <p class="eyebrow">Regulatory Reporting</p>
+        <h1>Regulatory Reports</h1>
+        <p class="lede">Generate, track, and export compliance reports.</p>
+        <div class="page-meta" aria-label="Page context">
+            <span class="meta-pill"><i class="fa-solid fa-clock"></i> Dates shown in local time</span>
+        </div>
+    </div>
+    <div class="hero-actions module-header-actions reg-reports-header-actions">
+        <div class="report-actions-row report-actions-export">
+            <a class="btn export-btn export-btn-excel" asp-action="ExportExcel"><i class="fa-solid fa-table"></i> Excel</a>
+            <a class="btn export-btn export-btn-pdf" asp-action="ExportPdf"><i class="fa-solid fa-file-arrow-down"></i> PDF</a>
+        </div>
+        <div class="report-actions-row report-actions-secondary">
+            @if (!isOperationalAdmin)
+            {
+                <a class="btn btn-outline-secondary" asp-action="Archived"><i class="fa-solid fa-box-archive"></i> Archived</a>
+            }
+            @if (canManageReports)
+            {
+                <a class="btn btn-success btn-lg px-4" asp-action="Create"><i class="fa-solid fa-plus"></i> New Report</a>
+            }
+        </div>
+    </div>
+</header>
+
+@if (!Model.Any())
+{
+    <section class="empty-state" aria-label="No regulatory reports">
+        <div class="empty-state-icon"><i class="fa-solid fa-chart-bar"></i></div>
+        <div>
+            <h3>No reports yet</h3>
+            <p>Create your first draft report to start tracking submission and approval status. Exports will appear once you have records.</p>
+            <div class="empty-state-actions">
+                @if (canManageReports)
+                {
+                    <a class="btn btn-success" asp-action="Create"><i class="fa-solid fa-plus"></i> New Report</a>
+                }
+                @if (!isOperationalAdmin)
+                {
+                    <a class="btn btn-outline-secondary" asp-action="Archived"><i class="fa-solid fa-box-archive"></i> View Archived</a>
+                }
+            </div>
+        </div>
+    </section>
+}
+else
+{
+    <div class="table-card">
+        <div class="table-card-header">
+            <div>
+                <h3 class="table-card-title">All Reports</h3>
+                <p class="table-card-subtitle">Click a row to open details. Use export buttons above for PDF/Excel.</p>
+            </div>
+        </div>
+        <table class="table data-table reg-reports-table">
+        <thead>
+            <tr>
+                <th class="d-none">Created</th>
+                <th>Report</th>
+                <th>Supplier</th>
+                <th>Period</th>
+                <th class="table-cell-center">Status</th>
+                <th class="table-cell-center col-actions">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var item in Model)
+        {
+            <tr data-href="@Url.Action("Details", new { id = item.Id })">
+                <td class="d-none">@item.CreatedAtUtc.Ticks</td>
+                <td class="table-primary-text">@item.ReportType</td>
+                <td>@(item.Supplier?.Name ?? "All suppliers")</td>
+                <td>@item.PeriodStartUtc.ToString("MMM dd, yyyy") - @item.PeriodEndUtc.ToString("MMM dd, yyyy")</td>
+                <td class="table-cell-center col-status">
+                    @{
+                        var statusName = item.ReportStatus?.Name ?? "Unknown";
+                        var wasOverrideApproved = overrideReportIds.Contains(item.Id);
+                        var badgeClass = statusName switch
+                        {
+                            "Draft" => "bg-secondary",
+                            "Submitted" => "bg-primary",
+                            "Accepted" => "bg-success",
+                            "Approved" => "bg-success",
+                            "Rejected" => "bg-danger",
+                            _ => "bg-secondary"
+                        };
+                    }
+                    <span class="badge @badgeClass">@statusName.ToUpper()</span>
+                    @if (statusName == "Accepted" && wasOverrideApproved)
+                    {
+                        <span class="badge bg-warning text-dark ms-1">OVERRIDE</span>
+                    }
+                </td>
+                <td class="actions-cell table-cell-center col-actions" onclick="event.stopPropagation()">
+                    @if (canManageReports && !item.IsDeleted)
+                    {
+                        <a class="icon-action text-warning" asp-action="Edit" asp-route-id="@item.Id" title="Edit"><i class="fa-solid fa-pen"></i></a>
+                        <form asp-action="Delete" method="post" class="d-inline" data-confirm="delete">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@item.Id" />
+                            <button type="submit" class="icon-action text-danger" aria-label="Archive report" title="Archive"><i class="fa-solid fa-box-archive"></i></button>
+                        </form>
+                    }
+                    else
+                    {
+                        <span class="text-muted">-</span>
+                    }
+                </td>
+            </tr>
+        }
+        </tbody>
+        </table>
+    </div>
+}
+
+@section Scripts {
+    <script>
+        $(function () {
+            $('.reg-reports-table').DataTable({
+                autoWidth: false,
+                order: [[0, 'desc']],
+                columnDefs: [
+                    { targets: 0, visible: false, searchable: false },
+                    { targets: 1, width: "20%" },
+                    { targets: 2, width: "22%" },
+                    { targets: 3, width: "28%" },
+                    { targets: 4, width: "15%" },
+                    { targets: 5, width: "15%", orderable: false, searchable: false }
+                ],
+                searching: true,
+                language: {
+                    search: "Search:",
+                    searchPlaceholder: "Type report or supplier..."
+                }
+            });
+        });
+    </script>
+}

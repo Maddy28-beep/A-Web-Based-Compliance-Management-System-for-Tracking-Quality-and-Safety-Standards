@@ -1,0 +1,49 @@
+@model FurniComply.Domain.Entities.Policy
+
+@{
+    ViewData["Title"] = "Edit Policy";
+}
+
+<section class="hero">
+    <div>
+        <p class="eyebrow">Policy Management</p>
+        <h1>Edit Policy</h1>
+        <p class="lede">Update policy details and lifecycle status.</p>
+    </div>
+</section>
+
+<div class="form-card">
+    <form asp-action="Edit" method="post">
+        <input type="hidden" asp-for="Id" />
+        <div class="form-grid">
+            <label>Code
+                <input asp-for="Code" readonly />
+            </label>
+            <label>Title
+                <input asp-for="Title" />
+            </label>
+            <label>Category
+                <select asp-for="PolicyCategoryId" asp-items="ViewBag.PolicyCategoryId"></select>
+            </label>
+            <label>Owner
+                <input asp-for="Owner" />
+            </label>
+            <label>Version
+                <input asp-for="Version" />
+            </label>
+            <label>Status
+                <select asp-for="Status" asp-items="Html.GetEnumSelectList<FurniComply.Domain.Enums.PolicyStatus>()"></select>
+            </label>
+            <label>Effective Date (Local time)
+                <input asp-for="EffectiveDateUtc" type="date" />
+            </label>
+        </div>
+        <label>Content
+            <textarea asp-for="Content" rows="6"></textarea>
+        </label>
+        <div class="hero-actions">
+            <button class="btn btn-success" type="submit">Save</button>
+            <a class="btn btn-outline-secondary" asp-action="Index">Cancel</a>
+        </div>
+    </form>
+</div>

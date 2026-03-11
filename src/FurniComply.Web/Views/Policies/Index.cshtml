@@ -1,0 +1,111 @@
+@model IEnumerable<FurniComply.Domain.Entities.Policy>
+
+@{
+    ViewData["Title"] = "Policies";
+    var isOperationalAdmin = User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.Admin) &&
+        !User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.SuperAdmin);
+    var canShowRowActions = isOperationalAdmin;
+}
+
+<header class="hero">
+    <div>
+        <p class="eyebrow">Governance</p>
+        <h1>Policies</h1>
+        <p class="lede">Manage internal policies, versioning, and approvals.</p>
+    </div>
+    <div class="hero-actions">
+        @if (isOperationalAdmin)
+        {
+            <a class="btn btn-outline-secondary" asp-action="Deleted"><i class="fa-solid fa-box-archive-arrow-up"></i> Restore Policies</a>
+            <a class="btn btn-success" asp-action="Create"><i class="fa-solid fa-plus"></i> Add Policy</a>
+        }
+    </div>
+</header>
+
+<div class="table-card">
+    <div class="table-card-header">
+        <div>
+            <h3 class="table-card-title">Policy Registry</h3>
+            <p class="table-card-subtitle">Click a row to open details. Draft policies can be approved or rejected from the actions column.</p>
+        </div>
+    </div>
+    <table id="grid" class="table table-hover align-middle data-table">
+        <thead>
+            <tr>
+                <th>Policy</th>
+                <th>Category</th>
+                <th>Owner</th>
+                <th class="table-cell-center">Status</th>
+                <th>Effective</th>
+                @if (canShowRowActions)
+                {
+                    <th class="col-actions table-cell-center">Actions</th>
+                }
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var item in Model)
+        {
+            <tr data-href="@Url.Action("Details", new { id = item.Id })">
+                <td class="fw-semibold">@item.Title</td>
+                <td>@item.PolicyCategory?.Name</td>
+                <td>@item.Owner</td>
+                <td class="table-cell-center col-status">
+                    @if (item.Status == FurniComply.Domain.Enums.PolicyStatus.Active)
+                    {
+                        <span class="badge bg-success">ACTIVE</span>
+                    }
+                    else if (item.Status == FurniComply.Domain.Enums.PolicyStatus.Draft)
+                    {
+                        <span class="badge bg-secondary">DRAFT</span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-danger">RETIRED</span>
+                    }
+                </td>
+                <td>@item.EffectiveDateUtc.ToString("yyyy-MM-dd")</td>
+                @if (canShowRowActions)
+                {
+                    <td class="actions-cell">
+                        @if (isOperationalAdmin && item.Status == FurniComply.Domain.Enums.PolicyStatus.Draft)
+                        {
+                            <form asp-action="Approve" method="post" class="d-inline" data-confirm="policy-approve">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@item.Id" />
+                                <button type="submit" class="btn btn-sm btn-success queue-action-btn"><i class="fa-solid fa-check"></i> Approve</button>
+                            </form>
+                            <form asp-action="Reject" method="post" class="d-inline" data-confirm="policy-reject">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@item.Id" />
+                                <button type="submit" class="btn btn-sm btn-danger queue-action-btn"><i class="fa-solid fa-xmark"></i> Reject</button>
+                            </form>
+                        }
+                        @if (isOperationalAdmin)
+                        {
+                            <a class="icon-action text-warning" asp-action="Edit" asp-route-id="@item.Id" onclick="event.stopPropagation();" aria-label="Edit policy">
+                                <i class="fa-solid fa-pen"></i>
+                            </a>
+                            <form asp-action="Delete" method="post" class="d-inline" data-confirm="soft-delete">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@item.Id" />
+                                <button type="submit" class="icon-action text-danger" aria-label="Archive policy"><i class="fa-solid fa-box-archive"></i></button>
+                            </form>
+                        }
+                    </td>
+                }
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+
+@section Scripts {
+    <script>
+        $(function () {
+            $('#grid').DataTable({
+                order: [[4, 'desc']]
+            });
+        });
+    </script>
+}

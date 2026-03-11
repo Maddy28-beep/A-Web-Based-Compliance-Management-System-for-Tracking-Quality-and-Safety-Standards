@@ -1,0 +1,143 @@
+@model IEnumerable<FurniComply.Domain.Entities.ComplianceCheck>
+
+@{
+    ViewData["Title"] = "Compliance Checks";
+    var canManageChecks =
+        !User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.SuperAdmin) &&
+        (User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.ComplianceManager) ||
+         User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.DepartmentHead));
+    var canShowRowActions = canManageChecks;
+}
+
+<header class="hero module-header">
+    <div>
+        <p class="eyebrow">Compliance Monitoring</p>
+        <h1>Compliance Checks</h1>
+        <p class="lede">Track and document compliance checks against active policies.</p>
+        <div class="page-meta" aria-label="Page context">
+            <span class="meta-pill"><i class="fa-solid fa-clock"></i> Dates shown in local time</span>
+            <span class="meta-pill"><i class="fa-solid fa-table-list"></i> @Model.Count() total</span>
+        </div>
+    </div>
+    <div class="hero-actions module-header-actions">
+        @if (canManageChecks)
+        {
+            <a class="btn btn-success btn-lg px-4" asp-action="Create"><i class="fa-solid fa-plus"></i> Add Check</a>
+            <a class="btn btn-outline-secondary" asp-action="Archived"><i class="fa-solid fa-box-archive"></i> Archived</a>
+        }
+    </div>
+</header>
+
+@if (!Model.Any())
+{
+    <section class="empty-state" aria-label="No compliance checks">
+        <div class="empty-state-icon"><i class="fa-solid fa-clipboard-check"></i></div>
+        <div>
+            <h3>No checks recorded</h3>
+            <p>Add a check to document compliance against an active policy. Checks support follow-up CAPA and reporting workflows.</p>
+            <div class="empty-state-actions">
+                @if (canManageChecks)
+                {
+                    <a class="btn btn-success" asp-action="Create"><i class="fa-solid fa-plus"></i> Add Check</a>
+                    <a class="btn btn-outline-secondary" asp-action="Archived"><i class="fa-solid fa-box-archive"></i> View Archived</a>
+                }
+            </div>
+        </div>
+    </section>
+}
+else
+{
+    <div class="table-card">
+        <div class="table-card-header">
+            <div>
+                <h3 class="table-card-title">Recent Checks</h3>
+                <p class="table-card-subtitle">Click a row to open details. Use search to find a policy quickly.</p>
+            </div>
+        </div>
+        <table class="table data-table compliance-checks-table">
+        <thead>
+            <tr>
+                <th class="sort-hidden-col">CheckedSort</th>
+                <th class="col-policy">Policy</th>
+                <th class="col-supplier">Supplier</th>
+                <th class="col-status table-cell-center">Status</th>
+                <th class="col-notes">Notes</th>
+                @if (canShowRowActions)
+                {
+                    <th class="col-actions table-cell-right">Actions</th>
+                }
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var item in Model)
+        {
+            var supplierName = "-";
+            var notes = item.Notes ?? string.Empty;
+            var supplierMarker = "Supplier:";
+            var supplierIndex = notes.IndexOf(supplierMarker, StringComparison.OrdinalIgnoreCase);
+            if (supplierIndex >= 0)
+            {
+                var start = supplierIndex + supplierMarker.Length;
+                var end = notes.IndexOf('|', start);
+                supplierName = (end > start ? notes.Substring(start, end - start) : notes.Substring(start)).Trim();
+                if (string.IsNullOrWhiteSpace(supplierName))
+                {
+                    supplierName = "-";
+                }
+            }
+            <tr data-href="@Url.Action("Details", new { id = item.Id })">
+                <td class="sort-hidden-col">@item.CreatedAtUtc.ToString("yyyy-MM-dd HH:mm")</td>
+                <td class="text-truncate-200 col-policy">@item.Policy?.Title</td>
+                <td class="text-truncate-150 col-supplier">@supplierName</td>
+                <td class="col-status table-cell-center">
+                    @{
+                        var statusName = item.ComplianceStatus?.Name ?? "Unknown";
+                        var badgeClass = statusName switch
+                        {
+                            "Compliant" => "bg-success",
+                            "Non-Compliant" => "bg-danger",
+                            "Pending" => "bg-primary",
+                            _ => "bg-secondary"
+                        };
+                    }
+                    <span class="badge @badgeClass">@statusName.ToUpper()</span>
+                </td>
+                <td class="table-cell-notes col-notes">@item.Notes</td>
+                @if (canShowRowActions)
+                {
+                    <td class="actions-cell col-actions">
+                        <a class="icon-action text-warning" asp-action="Edit" asp-route-id="@item.Id"><i class="fa-solid fa-pen"></i></a>
+                        <form asp-action="Delete" method="post" class="d-inline" data-confirm="delete">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@item.Id" />
+                            <button type="submit" class="icon-action text-danger" aria-label="Archive compliance check">
+                                <i class="fa-solid fa-box-archive"></i>
+                            </button>
+                        </form>
+                    </td>
+                }
+            </tr>
+        }
+        </tbody>
+        </table>
+    </div>
+}
+
+@section Scripts {
+    <script>
+        $(function () {
+            $('.compliance-checks-table').DataTable({
+                autoWidth: false,
+                order: [[0, 'desc']],
+                columnDefs: [
+                    { targets: 0, visible: false, searchable: false, className: "sort-hidden-col" },
+                    { targets: 1, width: "25%", orderable: true },
+                    { targets: 2, width: "15%", orderable: true },
+                    { targets: 3, width: "14%", orderable: true },
+                    { targets: 4, width: "36%" }@if (canShowRowActions) {<text>,
+                    { targets: 5, width: "10%", orderable: false, searchable: false }</text>}
+                ]
+            });
+        });
+    </script>
+}

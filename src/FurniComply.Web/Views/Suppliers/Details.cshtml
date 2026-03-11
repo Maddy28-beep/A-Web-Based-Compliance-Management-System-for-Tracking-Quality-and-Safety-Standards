@@ -1,0 +1,999 @@
+@model FurniComply.Domain.Entities.Supplier
+@using FurniComply.Application.Models
+@using FurniComply.Domain.Enums
+
+@{
+    ViewData["Title"] = "Supplier Details";
+    var canManageSuppliers = User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.Procurement);
+    var canApproveSupplier = User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.Admin);
+    var canReviewDocuments = User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.ComplianceManager);
+    var canCreateRegulatoryReport = User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.ComplianceManager);
+    var allDocuments = Model.ComplianceDocuments
+        .OrderByDescending(d => d.UpdatedAtUtc)
+        .ThenByDescending(d => d.CreatedAtUtc)
+        .ToList();
+    var activeDocuments = allDocuments
+        .Where(d => !d.IsDeleted)
+        .GroupBy(d => d.DocumentType)
+        .Select(g => g.First())
+        .OrderBy(d => d.DocumentType)
+        .ToList();
+    var archivedDocuments = allDocuments
+        .Where(d => d.IsDeleted)
+        .OrderByDescending(d => d.DeletedAtUtc)
+        .ThenBy(d => d.DocumentType)
+        .ToList();
+    var supplierStatus = Model.Status.ToString().ToUpper();
+    var statusBadgeClass = Model.Status switch
+    {
+        SupplierStatus.Active => "bg-success",
+        SupplierStatus.OnHold => "bg-warning text-dark",
+        SupplierStatus.Suspended => "bg-danger",
+        _ => "bg-secondary"
+    };
+    var approvalName = Model.ApprovalStatus.ToString();
+    var ratingBand = Model.Rating > 0m 
+        ? (Model.Rating >= 4m ? "Low Risk" : (Model.Rating >= 3m ? "Medium Risk" : "High Risk"))
+        : "Pending Evaluation";
+    var isSuperAdmin = User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.SuperAdmin);
+    var performances = ViewBag.Performances as List<FurniComply.Domain.Entities.SupplierPerformance> ?? new List<FurniComply.Domain.Entities.SupplierPerformance>();
+    var correctiveActions = ViewBag.CorrectiveActions as List<FurniComply.Domain.Entities.CorrectiveAction> ?? new List<FurniComply.Domain.Entities.CorrectiveAction>();
+    var complianceScore = ViewBag.ComplianceScore as SupplierComplianceScoreResult;
+    var evaluations = ViewBag.Evaluations as List<FurniComply.Domain.Entities.SupplierEvaluation> ?? new List<FurniComply.Domain.Entities.SupplierEvaluation>();
+    var overrideAudits = ViewBag.OverrideAudits as List<FurniComply.Domain.Entities.AuditLog> ?? new List<FurniComply.Domain.Entities.AuditLog>();
+    var latestOverrideEnable = overrideAudits.FirstOrDefault(a => a.Action == "OverrideEnabled");
+    var timelineItems = ViewBag.TimelineItems as List<FurniComply.Web.Models.SupplierTimelineItem> ?? new List<FurniComply.Web.Models.SupplierTimelineItem>();
+    var timelineTotal = (int?)ViewBag.TimelineTotal ?? timelineItems.Count;
+    var timelineTake = (int?)ViewBag.TimelineTake ?? 20;
+    var timelineSkip = (int?)ViewBag.TimelineSkip ?? 0;
+    var timelineType = (ViewBag.TimelineType as string) ?? string.Empty;
+    var timelineSeverity = (ViewBag.TimelineSeverity as string) ?? string.Empty;
+    var lastEvaluation = performances.OrderByDescending(e => e.EvaluationDateUtc).FirstOrDefault();
+    var hasRecentEvaluation = lastEvaluation != null && lastEvaluation.EvaluationDateUtc.Date == DateTime.UtcNow.Date;
+    
+    var complianceBand = complianceScore?.Band ?? "Unknown";
+    var complianceBandChip = complianceBand switch
+    {
+        "Compliant" => "good",
+        "At Risk" => "warn",
+        "High Risk" => "risk",
+        "Blocked" => "risk",
+        _ => "neutral"
+    };
+
+    var hasRiskBlockers = complianceScore != null && (
+                         complianceScore.HighActiveAlerts > 0 || 
+                         complianceScore.CriticalActiveAlerts > 0 || 
+                         complianceScore.OverdueCapaCount > 0 || 
+                         complianceScore.OpenCapaCount > 0 ||
+                         Model.Status == SupplierStatus.OnHold ||
+                         Model.ApprovalStatus != SupplierApprovalStatus.Approved ||
+                         (Model.PerformanceScore > 0m && Model.PerformanceScore < 3.0m));
+                         
+    var hasDocBlockers = complianceScore != null && (
+                        complianceScore.MissingRequiredDocuments > 0 || 
+                        complianceScore.ExpiredRequiredDocuments > 0 || 
+                        complianceScore.PendingRequiredDocuments > 0);
+}
+
+<header class="hero supplier-detail-hero">
+    <div>
+        <p class="eyebrow">Procurement</p>
+        <h1>
+            @Model.Name
+            @if (Model.IsOverrideActive)
+            {
+                <span class="badge bg-warning text-dark ms-2 supplier-override-badge" title="Super Admin Override Active">
+                    <i class="fa-solid fa-shield-halved"></i> OVERRIDDEN
+                </span>
+            }
+        </h1>
+        <p class="lede">Status <span class="badge @statusBadgeClass">@supplierStatus</span> · Category @Model.SupplierCategory?.Name · Performance Score @(Model.PerformanceScore > 0 ? Model.PerformanceScore.ToString("0.0") : "N/A") · Risk @ratingBand</p>
+        <div class="page-meta" aria-label="Page context">
+            <span class="meta-pill"><i class="fa-solid fa-industry"></i> @supplierStatus</span>
+            <span class="meta-pill"><i class="fa-solid fa-stamp"></i> @approvalName</span>
+            <span class="meta-pill"><i class="fa-solid fa-gauge-high"></i> @(Model.PerformanceScore > 0 ? Model.PerformanceScore.ToString("0.0") : "No Eval")</span>
+            <span class="meta-pill">
+                @if (lastEvaluation != null)
+                {
+                    <i class="fa-solid fa-circle-check text-success"></i> <span>Evaluated (Score: @Model.PerformanceScore.ToString("0.0"))</span>
+                }
+                else
+                {
+                    <i class="fa-solid fa-circle-exclamation text-warning"></i> <span>Not Yet Evaluated</span>
+                }
+            </span>
+            <span class="meta-pill"><i class="fa-solid fa-shield-halved"></i> @ratingBand</span>
+            @if (complianceScore != null)
+            {
+                <span class="meta-pill"><i class="fa-solid fa-clipboard-check"></i> Compliance @complianceScore.Score/100 (@complianceScore.Band)</span>
+            }
+        </div>
+    </div>
+    <div class="hero-actions supplier-detail-actions">
+        <a class="btn btn-outline-secondary" asp-action="Index"><i class="fa-solid fa-arrow-left"></i> Back</a>
+        @if (User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.Procurement) && 
+             (Model.ApprovalStatus != FurniComply.Domain.Enums.SupplierApprovalStatus.Pending || 
+              Model.Status == FurniComply.Domain.Enums.SupplierStatus.Suspended))
+        {
+            if (hasRecentEvaluation)
+            {
+                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#performanceModal">
+                    <i class="fa-solid fa-arrows-rotate"></i> Re-Evaluate Supplier
+                </button>
+            }
+            else
+            {
+                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#performanceModal">
+                    <i class="fa-solid fa-star"></i> Evaluate Performance
+                </button>
+            }
+            <a class="btn btn-outline-secondary" asp-action="Edit" asp-route-id="@Model.Id"><i class="fa-solid fa-pen"></i> Edit</a>
+        }
+        @if (canCreateRegulatoryReport && 
+             (Model.ApprovalStatus != FurniComply.Domain.Enums.SupplierApprovalStatus.Pending || 
+              Model.Status == FurniComply.Domain.Enums.SupplierStatus.Suspended))
+        {
+            <a class="btn btn-outline-secondary" asp-controller="RegulatoryReports" asp-action="Create" asp-route-supplierId="@Model.Id"><i class="fa-solid fa-chart-bar"></i> Regulatory Report</a>
+        }
+        @if (canApproveSupplier &&
+             Model.ApprovalStatus == FurniComply.Domain.Enums.SupplierApprovalStatus.Pending)
+        {
+            <form asp-action="Approve" method="post" class="d-inline" data-confirm="supplier-approve">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" value="@Model.Id" />
+                <button class="btn btn-success px-4" type="submit"><i class="fa-solid fa-check"></i> Approve</button>
+            </form>
+            <form asp-action="Reject" method="post" class="d-inline" data-confirm="supplier-reject">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" value="@Model.Id" />
+                <button class="btn btn-outline-danger" type="submit"><i class="fa-solid fa-xmark"></i> Reject</button>
+            </form>
+        }
+    </div>
+</header>
+
+<div class="modal fade" id="performanceModal" tabindex="-1" aria-labelledby="performanceModalLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered performance-eval-modal">
+        <div class="modal-content">
+            <form id="performanceEvalForm" asp-controller="Suppliers" asp-action="EvaluatePerformance" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="supplierId" value="@Model.Id" />
+                <div class="modal-header py-2">
+                    <h5 class="modal-title" id="performanceModalLabel">Supplier Performance Evaluation</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body performance-eval-modal-body">
+                    <div class="mb-2">
+                        <label class="form-label" for="productName">Product / Material</label>
+                        <select name="productName" id="productName" class="form-select js-select2" required placeholder="Select product or material...">
+                            <option value="">— Select product or material —</option>
+                            @{
+                                var supplierProducts = ViewBag.SupplierProducts as List<string> ?? new List<string>();
+                            }
+                            @foreach (var prod in supplierProducts)
+                            {
+                                <option value="@prod">@prod</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="row g-3 mb-3 performance-eval-row">
+                        <div class="col">
+                            <label class="form-label">Quality Rating (1-5)</label>
+                            <select name="qualityRating" class="form-select" required>
+                                <option value="5">5 - Excellent</option>
+                                <option value="4">4 - Good</option>
+                                <option value="3">3 - Fair</option>
+                                <option value="2">2 - Poor</option>
+                                <option value="1">1 - Critical</option>
+                            </select>
+                        </div>
+                        <div class="col">
+                            <label class="form-label">Delivery Rating (1-5)</label>
+                            <select name="deliveryRating" class="form-select" required>
+                                <option value="5">5 - On Time</option>
+                                <option value="4">4 - Minor Delay</option>
+                                <option value="3">3 - Moderate Delay</option>
+                                <option value="2">2 - Frequent Delays</option>
+                                <option value="1">1 - Failed Deliveries</option>
+                            </select>
+                        </div>
+                        <div class="col">
+                            <label class="form-label">
+                                Defect Rate (%)
+                                <button type="button" class="btn btn-link p-0 ms-1 lh-1" style="font-size:0.85em;" data-bs-toggle="tooltip" data-bs-placement="top" title="0-1% Excellent, 1.1-3% Acceptable, above 3% needs corrective action."><i class="fa-solid fa-circle-info text-muted"></i><span class="visually-hidden">Defect rate guide</span></button>
+                            </label>
+                            <select name="defectRate" class="form-select" required>
+                                <option value="">— Select —</option>
+                                <option value="0" selected>0%</option>
+                                <option value="0.5">0.5%</option>
+                                <option value="1">1%</option>
+                                <option value="1.5">1.5%</option>
+                                <option value="2">2%</option>
+                                <option value="2.5">2.5%</option>
+                                <option value="3">3%</option>
+                                <option value="4">4%</option>
+                                <option value="5">5%</option>
+                                <option value="7.5">7.5%</option>
+                                <option value="10">10%</option>
+                                <option value="15">15%</option>
+                                <option value="20">20%</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="performance-eval-remarks mt-4 mb-0">
+                        <label class="form-label">Remarks</label>
+                        <textarea name="remarks" class="form-control form-control-notes" rows="5" required placeholder="Add evaluation notes..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Submit Evaluation</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@if (complianceScore != null)
+{
+    var isEligible = !hasRiskBlockers && (!hasDocBlockers || (Model.IsOverrideActive && !string.IsNullOrWhiteSpace(Model.OverrideReason)));
+    var riskIcon = hasRiskBlockers ? "fa-shield-halved" : "fa-shield-check";
+    var riskStatus = hasRiskBlockers ? "Blocked" : "Clear";
+    var docIcon = hasDocBlockers ? (Model.IsOverrideActive ? "fa-shield-halved" : "fa-file-circle-exclamation") : "fa-file-circle-check";
+    var docStatus = hasDocBlockers ? (Model.IsOverrideActive ? "Overridden" : "Issues Found") : "Compliant";
+
+        <div class="gate-status-redesign">
+            <div class="gate-verdict @(isEligible ? "gate-verdict--eligible" : "gate-verdict--blocked")">
+                <div class="gate-verdict-icon">
+                    <i class="fa-solid @(isEligible ? "fa-circle-check" : "fa-circle-xmark")"></i>
+                </div>
+                <div class="gate-verdict-text">
+                    <span class="gate-verdict-label">Procurement Gate</span>
+                    <span class="gate-verdict-result">@(isEligible ? "Ready for Procurement" : "Blocked from Procurement")</span>
+                </div>
+            </div>
+
+            <div class="gate-status-grid">
+                <div class="gate-status-tile @(hasRiskBlockers ? "gate-status-tile--blocked" : "gate-status-tile--pass")">
+                    <div class="gate-status-tile-header">
+                        <i class="fa-solid @riskIcon"></i>
+                        <span>Risk & Quality</span>
+                    </div>
+                    <div class="gate-status-tile-value">@riskStatus</div>
+                    @if (hasRiskBlockers)
+                    {
+                        <ul class="gate-status-tile-details">
+                            @if (complianceScore.HighActiveAlerts > 0) { <li>@complianceScore.HighActiveAlerts High Alerts</li> }
+                            @if (complianceScore.CriticalActiveAlerts > 0) { <li>@complianceScore.CriticalActiveAlerts Critical Alerts</li> }
+                            @if (complianceScore.OverdueCapaCount > 0) { <li>@complianceScore.OverdueCapaCount Overdue CAPAs</li> }
+                            @if (complianceScore.OpenCapaCount > 0) { <li>@complianceScore.OpenCapaCount Open CAPAs</li> }
+                            @if (Model.Status == SupplierStatus.OnHold) { <li>Operational Status: On Hold</li> }
+                            @if (Model.ApprovalStatus != SupplierApprovalStatus.Approved) { <li>Approval Status: @Model.ApprovalStatus</li> }
+                            @if (Model.PerformanceScore > 0 && Model.PerformanceScore < 3.0m) { <li>Performance Score: @Model.PerformanceScore.ToString("0.0") (Below 3.0)</li> }
+                        </ul>
+                        <div class="gate-status-tile-note">
+                            <i class="fa-solid fa-ban"></i> Override not allowed for risk factors. Document override cannot bypass these blockers.
+                        </div>
+                    }
+                </div>
+
+                <div class="gate-status-tile @(hasDocBlockers && !Model.IsOverrideActive ? "gate-status-tile--blocked" : "gate-status-tile--pass")">
+                    <div class="gate-status-tile-header">
+                        <i class="fa-solid @docIcon"></i>
+                        <span>Documents</span>
+                    </div>
+                    <div class="gate-status-tile-value">@docStatus</div>
+                    @if (hasDocBlockers)
+                    {
+                        <ul class="gate-status-tile-details">
+                            @if (complianceScore.MissingRequiredDocuments > 0) { <li>@complianceScore.MissingRequiredDocuments Missing</li> }
+                            @if (complianceScore.ExpiredRequiredDocuments > 0) { <li>@complianceScore.ExpiredRequiredDocuments Expired</li> }
+                            @if (complianceScore.PendingRequiredDocuments > 0) { <li>@complianceScore.PendingRequiredDocuments Pending Review</li> }
+                        </ul>
+                        @if (Model.IsOverrideActive)
+                        {
+                            <div class="gate-status-tile-note gate-status-tile-note--override">
+                                <i class="fa-solid fa-shield-halved"></i> Override applied (documents only)
+                            </div>
+                        }
+                    }
+                </div>
+
+                <div class="gate-status-tile gate-status-tile--score">
+                    <div class="gate-status-tile-header">
+                        <i class="fa-solid fa-gauge-high"></i>
+                        <span>Compliance Score</span>
+                    </div>
+                    <div class="gate-status-tile-value gate-status-tile-value--large">@complianceScore.Score<span class="gate-score-max">/100</span></div>
+                    <span class="gate-status-chip gate-status-chip--@complianceBandChip">@complianceBand</span>
+                </div>
+            </div>
+
+            <div class="gate-analysis">
+                <span class="gate-analysis-label">Analysis</span>
+                <span class="gate-analysis-text">
+                    @if (complianceScore.TopReasons.Any())
+                    {
+                        @string.Join(" · ", complianceScore.TopReasons)
+                    }
+                    else
+                    {
+                        @:No active deductions. Supplier is currently compliant.
+                    }
+                </span>
+            </div>
+        </div>
+}
+
+@if (canManageSuppliers && !Model.IsOverrideActive && !Model.OverrideRequestActive && hasDocBlockers)
+{
+    <!-- Request Override Modal -->
+    <div class="modal fade" id="requestOverrideModal" tabindex="-1" aria-labelledby="requestOverrideModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="requestOverrideModalLabel">Request Document Override</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form asp-action="RequestOverride" method="post">
+                    @Html.AntiForgeryToken()
+                    <div class="modal-body">
+                        <input type="hidden" name="id" value="@Model.Id" />
+                        <p>You are requesting a <strong>Procurement Document Override</strong> for @Model.Name. This will allow the procurement team to process orders despite missing or expired documents.</p>
+                        <div class="alert alert-info">
+                            <strong>Note:</strong> This request will be sent to the Super Admin for approval. You must provide a valid business justification.
+                        </div>
+                        <div class="mb-3">
+                            <label for="reason" class="form-label">Justification / Reason</label>
+                            <textarea class="form-control" name="reason" rows="4" required placeholder="e.g., Critical production material, permit renewal is in progress with government..."></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-warning">
+                            <i class="fa-solid fa-paper-plane"></i> Send Request
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+}
+
+<div class="detail-card supplier-detail-card supplier-override-card">
+    <div class="detail-section-header">
+        <div>
+            <h3 style="margin:0;">Procurement Document Override</h3>
+            @if (Model.IsOverrideActive)
+            {
+                <p class="section-meta mt-2 mb-0">
+                    <span class="badge bg-warning text-dark">DOCUMENT OVERRIDE ACTIVE</span>
+                </p>
+            }
+            else if (Model.OverrideRequestActive)
+            {
+                <p class="section-meta mt-2 mb-0">
+                    <span class="badge bg-info text-dark"><i class="fa-solid fa-clock"></i> OVERRIDE REQUEST PENDING</span>
+                </p>
+            }
+        </div>
+        <div>
+            @if (isSuperAdmin)
+            {
+                if (Model.IsOverrideActive)
+                {
+                    <button class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#overrideModal">
+                        <i class="fa-solid fa-shield-halved"></i> Revoke Doc Override
+                    </button>
+                }
+                else if (!Model.OverrideRequestActive)
+                {
+                    <button class="btn btn-dark" data-bs-toggle="modal" data-bs-target="#overrideModal">
+                        <i class="fa-solid fa-shield-halved"></i> Enable Doc Override
+                    </button>
+                }
+            }
+            else if (canManageSuppliers && !Model.IsOverrideActive && !Model.OverrideRequestActive && hasDocBlockers)
+            {
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#requestOverrideModal">
+                    <i class="fa-solid fa-paper-plane"></i> Request Doc Override
+                </button>
+            }
+        </div>
+    </div>
+
+    @if (Model.OverrideRequestActive)
+    {
+        <div class="alert alert-info mt-3 mb-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <strong><i class="fa-solid fa-circle-info"></i> Pending Override Request</strong><br />
+                    <span class="small">Requested by <strong>@Model.RequestedBy</strong> on @Model.RequestedAtUtc?.ToLocalTime().ToString("yyyy-MM-dd hh:mm tt")</span><br />
+                    <p class="mb-0 mt-1"><em>"@Model.OverrideRequestReason"</em></p>
+                </div>
+                @if (isSuperAdmin)
+                {
+                    <div class="btn-group">
+                        <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#overrideModal">
+                            <i class="fa-solid fa-check"></i> Approve
+                        </button>
+                        <form asp-action="RejectOverrideRequest" method="post" class="d-inline ms-1" data-confirm="reject-request">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@Model.Id" />
+                            <button type="submit" class="btn btn-sm btn-danger">
+                                <i class="fa-solid fa-xmark"></i> Reject
+                            </button>
+                        </form>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    <dl>
+        <dt>Override Status</dt>
+        <dd>@(Model.IsOverrideActive ? "ACTIVE" : (Model.OverrideRequestActive ? "PENDING APPROVAL" : "INACTIVE"))</dd>
+        <dt>Scope</dt>
+        <dd>Procurement Gating (Documents Only)</dd>
+        @if (Model.IsOverrideActive)
+        {
+            <dt>Override Reason</dt>
+            <dd>@(string.IsNullOrWhiteSpace(Model.OverrideReason) ? "-" : Model.OverrideReason)</dd>
+            <dt>Approved By</dt>
+            <dd>@(!string.IsNullOrWhiteSpace(Model.OverriddenBy) ? Model.OverriddenBy : (latestOverrideEnable?.Actor ?? "-"))</dd>
+            <dt>Approved At</dt>
+            <dd>@(latestOverrideEnable != null ? latestOverrideEnable.TimestampUtc.ToLocalTime().ToString("yyyy-MM-dd hh:mm tt") : "-")</dd>
+        }
+        else if (Model.OverrideRequestActive)
+        {
+            <dt>Request Reason</dt>
+            <dd>@Model.OverrideRequestReason</dd>
+            <dt>Requested By</dt>
+            <dd>@Model.RequestedBy</dd>
+            <dt>Requested At</dt>
+            <dd>@Model.RequestedAtUtc?.ToLocalTime().ToString("yyyy-MM-dd hh:mm tt")</dd>
+        }
+    </dl>
+    <div class="alert alert-warning mb-0 mt-3">
+        <strong>Note:</strong> This override applies only to <strong>supplier document requirements</strong> during procurement.
+        It <strong>cannot bypass CAPA, High/Critical alerts, or product quality risks.</strong>
+    </div>
+</div>
+
+<div class="detail-card supplier-detail-card">
+    <div class="detail-section-header">
+        <div>
+            <h3 style="margin:0;">Override History</h3>
+            <p class="section-meta" style="margin:6px 0 0;">Audit trail of override enable/disable actions.</p>
+        </div>
+    </div>
+    <div class="detail-table-wrap">
+        <table class="table compact">
+            <thead>
+                <tr>
+                    <th>Actor</th>
+                    <th>Action</th>
+                    <th>Reason</th>
+                    <th>Timestamp</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (overrideAudits.Any())
+                {
+                    @foreach (var audit in overrideAudits)
+                    {
+                        var actionLabel = audit.Action == "OverrideEnabled" ? "Enable" : "Disable";
+                        var reason = "-";
+                        if (audit.Action == "OverrideEnabled")
+                        {
+                            var detailText = audit.Details ?? string.Empty;
+                            var marker = "Super Admin override enabled:";
+                            reason = detailText.StartsWith(marker, StringComparison.OrdinalIgnoreCase)
+                                ? detailText.Substring(marker.Length).Trim()
+                                : detailText;
+                            if (string.IsNullOrWhiteSpace(reason))
+                            {
+                                reason = "-";
+                            }
+                        }
+                        <tr>
+                            <td>@audit.Actor</td>
+                            <td>@actionLabel</td>
+                            <td>@reason</td>
+                            <td>@audit.TimestampUtc.ToString("yyyy-MM-dd hh:mm tt 'UTC'")</td>
+                        </tr>
+                    }
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="4" class="text-center py-4">No override history found.</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@if (!isSuperAdmin)
+{
+    <div class="detail-card supplier-detail-card supplier-contact-card">
+        <dl>
+            <dt>Contact Email</dt>
+            <dd>@Model.ContactEmail</dd>
+            <dt>Certifications</dt>
+            <dd>@Model.Certifications</dd>
+            <dt>Category</dt>
+            <dd>@(Model.SupplierCategory?.Name ?? "-")</dd>
+        </dl>
+    </div>
+}
+
+<div class="detail-card supplier-detail-card">
+    <div class="detail-section-header">
+        <div>
+            <h3 style="margin:0;">Supplier Compliance Timeline</h3>
+            <p class="section-meta" style="margin:6px 0 0;">Merged history across documents, checks, CAPA, alerts, evaluations, overrides, and key audit events.</p>
+        </div>
+    </div>
+
+    <form method="get" class="filters-row mb-4">
+        <input type="hidden" name="id" value="@Model.Id" />
+        <input type="hidden" name="timelineTake" value="@timelineTake" />
+        <input type="hidden" name="timelineSkip" value="0" />
+        
+        <div class="filter-group">
+            <label class="form-label">Event Type</label>
+            <select name="timelineType" class="form-select js-select2">
+                <option value="">All Types</option>
+                @if (timelineType == "Document") { <option value="Document" selected>Document</option> } else { <option value="Document">Document</option> }
+                @if (timelineType == "ComplianceCheck") { <option value="ComplianceCheck" selected>Compliance Check</option> } else { <option value="ComplianceCheck">Compliance Check</option> }
+                @if (timelineType == "CAPA") { <option value="CAPA" selected>CAPA</option> } else { <option value="CAPA">CAPA</option> }
+                @if (timelineType == "Alert") { <option value="Alert" selected>Alert</option> } else { <option value="Alert">Alert</option> }
+                @if (timelineType == "Override") { <option value="Override" selected>Override</option> } else { <option value="Override">Override</option> }
+                @if (timelineType == "Audit") { <option value="Audit" selected>Audit</option> } else { <option value="Audit">Audit</option> }
+            </select>
+        </div>
+
+        <div class="filter-group">
+            <label class="form-label">Severity</label>
+            <select name="timelineSeverity" class="form-select js-select2">
+                <option value="">All Severities</option>
+                @if (timelineSeverity == "High") { <option value="High" selected>High</option> } else { <option value="High">High</option> }
+                @if (timelineSeverity == "Medium") { <option value="Medium" selected>Medium</option> } else { <option value="Medium">Medium</option> }
+                @if (timelineSeverity == "Info") { <option value="Info" selected>Info</option> } else { <option value="Info">Info</option> }
+            </select>
+        </div>
+
+        <div class="filter-actions d-flex align-items-end gap-2">
+            <button type="submit" class="btn btn-primary"><i class="fa-solid fa-filter"></i> Apply</button>
+            <a class="btn btn-outline-secondary" asp-action="Details" asp-route-id="@Model.Id"><i class="fa-solid fa-rotate-left"></i> Reset</a>
+        </div>
+    </form>
+
+    <div class="detail-table-wrap">
+        <table class="table compact">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Type</th>
+                    <th>Severity</th>
+                    <th>Summary</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (timelineItems.Any())
+                {
+                    @foreach (var item in timelineItems)
+                    {
+                        var severityClass = item.Severity switch
+                        {
+                            "High" => "risk",
+                            "Medium" => "warn",
+                            _ => "good"
+                        };
+                        var iconClass = item.EventType switch
+                        {
+                            "Document" => "fa-file-shield",
+                            "ComplianceCheck" => "fa-clipboard-check",
+                            "CAPA" => "fa-screwdriver-wrench",
+                            "Alert" => "fa-triangle-exclamation",
+                            "Override" => "fa-shield-halved",
+                            "Audit" => "fa-list-check",
+                            _ => "fa-circle-info"
+                        };
+                        <tr data-href="@(string.IsNullOrWhiteSpace(item.SourceRoute) ? "#" : item.SourceRoute)">
+                            <td>@item.DateUtc.ToLocalTime().ToString("yyyy-MM-dd hh:mm tt")</td>
+                            <td><span class="status-chip muted"><i class="fa-solid @iconClass"></i> @item.EventType</span></td>
+                            <td><span class="status-chip @severityClass">@item.Severity</span></td>
+                            <td>
+                                <strong>@item.Title</strong><br />
+                                <span class="section-meta">@item.Description</span>
+                            </td>
+                        </tr>
+                    }
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="4" class="text-center py-4">No timeline entries found for the selected filters.</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (timelineTotal > (timelineSkip + timelineItems.Count))
+    {
+        <div class="mt-3">
+            <a class="btn btn-outline-secondary"
+               asp-action="Details"
+               asp-route-id="@Model.Id"
+               asp-route-timelineTake="@(timelineTake + 20)"
+               asp-route-timelineSkip="0"
+               asp-route-timelineType="@timelineType"
+               asp-route-timelineSeverity="@timelineSeverity">
+                <i class="fa-solid fa-clock-rotate-left"></i> Load more
+            </a>
+        </div>
+    }
+</div>
+
+<div class="detail-card supplier-detail-card">
+    <ul class="nav nav-tabs mb-4" id="supplierTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="compliance-tab" data-bs-toggle="tab" data-bs-target="#compliance" type="button" role="tab" aria-controls="compliance" aria-selected="true">Compliance Docs</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="performance-tab" data-bs-toggle="tab" data-bs-target="#performance" type="button" role="tab" aria-controls="performance" aria-selected="false">Performance</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="capa-tab" data-bs-toggle="tab" data-bs-target="#capa" type="button" role="tab" aria-controls="capa" aria-selected="false">CAPA Findings</button>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="supplierTabsContent">
+        <div class="tab-pane fade show active" id="compliance" role="tabpanel" aria-labelledby="compliance-tab">
+            <div class="detail-section">
+                <div class="detail-section-header">
+                    <div>
+                        <h3 style="margin:0;">Compliance Documents</h3>
+                        <p class="section-meta" style="margin:6px 0 0;">Active documents are grouped by type. Expiry dates display in local time.</p>
+                    </div>
+                </div>
+                @if (canManageSuppliers)
+                {
+                    <form asp-action="UploadRequiredDocuments" method="post" enctype="multipart/form-data" class="bulk-doc-upload mb-4">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="supplierId" value="@Model.Id" />
+                        <div class="bulk-doc-upload-row">
+                            <span>Business Permit</span>
+                            <input type="file" name="businessPermitUpload" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx" />
+                            <div class="expiry-field">
+                                <span class="expiry-field-label">Expiry date</span>
+                                <input type="date" name="businessPermitExpiryUtc" />
+                            </div>
+                        </div>
+                        <div class="bulk-doc-upload-row">
+                            <span>Environmental Certificate</span>
+                            <input type="file" name="environmentalCertificateUpload" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx" />
+                            <div class="expiry-field">
+                                <span class="expiry-field-label">Expiry date</span>
+                                <input type="date" name="environmentalCertificateExpiryUtc" />
+                            </div>
+                        </div>
+                        <div class="bulk-doc-upload-row">
+                            <span>Sustainability Declaration</span>
+                            <input type="file" name="sustainabilityDeclarationUpload" accept=".pdf,.png,.jpg,.jpeg,.doc,.docx" />
+                            <div class="expiry-field">
+                                <span class="expiry-field-label">Expiry date</span>
+                                <input type="date" name="sustainabilityDeclarationExpiryUtc" />
+                            </div>
+                        </div>
+                        <div class="bulk-doc-upload-row bulk-doc-upload-row-button">
+                            <span></span>
+                            <div></div>
+                            <div class="expiry-field">
+                                <div class="doc-upload-actions">
+                                    <button type="submit" class="btn btn-success">Save All Documents</button>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                }
+                <div class="detail-table-wrap">
+                    <table class="table compact compliance-docs-table">
+                        <thead>
+                            <tr>
+                                <th style="width:40%;">Type</th>
+                                <th class="table-cell-center" style="width:18%;">Status</th>
+                                <th style="width:22%;">Expiry</th>
+                                <th class="table-cell-center" style="width:20%;">File</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (activeDocuments.Any())
+                            {
+                                @foreach (var document in activeDocuments)
+                                {
+                                    var hasUpload = !string.IsNullOrWhiteSpace(document.FileUrl) && document.FileUrl.StartsWith("/uploads/");
+                                    <tr>
+                                        <td class="fw-semibold">@document.DocumentType</td>
+                                        <td class="table-cell-center"><span class="status-chip muted">@document.DocumentStatus</span></td>
+                                        <td class="table-secondary-text">@(document.ExpiryDateUtc.HasValue ? document.ExpiryDateUtc.Value.ToString("MMM dd, yyyy") : "-")</td>
+                                        <td>
+                                            <div class="doc-file-row">
+                                                @if (hasUpload)
+                                                {
+                                                    <a class="icon-action" asp-action="DocumentPreview" asp-route-id="@document.Id" target="_blank" title="Preview"><i class="fa-solid fa-eye"></i></a>
+                                                    <a class="icon-action" asp-action="DocumentDownload" asp-route-id="@document.Id" title="Download"><i class="fa-solid fa-download"></i></a>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-danger bg-opacity-10 text-danger"><i class="fa-solid fa-circle-exclamation"></i> No file</span>
+                                                }
+                                                @if (canReviewDocuments)
+                                                {
+                                                    <span class="doc-review-actions">
+                                                        @if (hasUpload)
+                                                        {
+                                                            <form asp-action="ReviewDocument" method="post" class="d-inline" data-confirm="supplier-doc-review">
+                                                                @Html.AntiForgeryToken()
+                                                                <input type="hidden" name="id" value="@document.Id" />
+                                                                <button class="icon-action text-success" type="submit" title="Verify"><i class="fa-solid fa-circle-check"></i></button>
+                                                            </form>
+                                                        }
+                                                        <form asp-action="FlagDocument" method="post" class="d-inline" data-confirm="supplier-doc-flag">
+                                                            @Html.AntiForgeryToken()
+                                                            <input type="hidden" name="id" value="@document.Id" />
+                                                            <button type="submit" class="icon-action text-danger" title="Flag"><i class="fa-solid fa-flag"></i></button>
+                                                        </form>
+                                                    </span>
+                                                }
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                            else
+                            {
+                                <tr>
+                                    <td colspan="4" class="text-center py-4 table-secondary-text">No active compliance documents found.</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                @if (archivedDocuments.Any())
+                {
+                    <div class="detail-table-wrap mt-4">
+                        <h4>Archived Documents</h4>
+                        <table class="table compact compliance-docs-table">
+                            <thead>
+                                <tr>
+                                    <th style="width:40%;">Type</th>
+                                    <th class="table-cell-center" style="width:18%;">Status</th>
+                                    <th style="width:22%;">Archived On</th>
+                                    <th class="table-cell-center" style="width:20%;">File</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var document in archivedDocuments)
+                                {
+                                    var hasUpload = !string.IsNullOrWhiteSpace(document.FileUrl) && document.FileUrl.StartsWith("/uploads/");
+                                    <tr>
+                                        <td class="fw-semibold">@document.DocumentType</td>
+                                        <td class="table-cell-center"><span class="status-chip muted">@document.DocumentStatus</span></td>
+                                        <td class="table-secondary-text">@(document.DeletedAtUtc.HasValue ? document.DeletedAtUtc.Value.ToString("MMM dd, yyyy") : "-")</td>
+                                        <td>
+                                            <div class="doc-file-row">
+                                                @if (hasUpload)
+                                                {
+                                                    <a class="icon-action" asp-action="DocumentPreview" asp-route-id="@document.Id" target="_blank" title="Preview"><i class="fa-solid fa-eye"></i></a>
+                                                    <a class="icon-action" asp-action="DocumentDownload" asp-route-id="@document.Id" title="Download"><i class="fa-solid fa-download"></i></a>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted">No file</span>
+                                                }
+                                                @if (canManageSuppliers)
+                                                {
+                                                    <span class="doc-manage-actions">
+                                                        <form asp-action="DocumentRestore" method="post" class="d-inline" data-confirm="restore">
+                                                            @Html.AntiForgeryToken()
+                                                            <input type="hidden" name="id" value="@document.Id" />
+                                                            <button type="submit" class="icon-action text-success" title="Restore"><i class="fa-solid fa-rotate-left"></i></button>
+                                                        </form>
+                                                    </span>
+                                                }
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="performance" role="tabpanel" aria-labelledby="performance-tab">
+            <div class="detail-section">
+                <div class="detail-section-header">
+                    <div>
+                        <h3 style="margin:0;">Performance History</h3>
+                        <p class="section-meta" style="margin:6px 0 0;">Historical record of procurement evaluations. The latest evaluation determines procurement eligibility.</p>
+                    </div>
+                </div>
+                <div class="detail-table-wrap">
+                    <table class="table compact">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Product / Material</th>
+                                <th>Quality</th>
+                                <th>Delivery</th>
+                                <th>Defects</th>
+                                <th>Score</th>
+                                <th>Evaluated By</th>
+                                <th>Remarks</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (performances.Any())
+                            {
+                                @foreach (var p in performances.OrderByDescending(p => p.EvaluationDateUtc))
+                                {
+                                    <tr>
+                                        <td>@p.EvaluationDateUtc.ToLocalTime().ToString("yyyy-MM-dd hh:mm tt")</td>
+                                        <td><strong>@(p.ProductName ?? "General")</strong></td>
+                                        <td>@p.QualityRating/5</td>
+                                        <td>@p.DeliveryRating/5</td>
+                                        <td>@p.DefectRate.ToString("0.0")%</td>
+                                        <td><strong>@p.PerformanceScore.ToString("0.0")</strong></td>
+                                        <td>@p.EvaluatedBy</td>
+                                        <td class="text-truncate-200" title="@p.Remarks">@p.Remarks</td>
+                                    </tr>
+                                }
+                            }
+                            else
+                            {
+                                <tr>
+                                    <td colspan="7" class="text-center py-4">No performance records found.</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="capa" role="tabpanel" aria-labelledby="capa-tab">
+            <div class="detail-section">
+                <div class="detail-section-header">
+                    <div>
+                        <h3 style="margin:0;">Corrective Actions (CAPA)</h3>
+                        <p class="section-meta" style="margin:6px 0 0;">Open and resolved findings for this supplier.</p>
+                    </div>
+                </div>
+                <div class="detail-table-wrap">
+                    <table class="table compact">
+                        <thead>
+                            <tr>
+                                <th>Type</th>
+                                <th>Title</th>
+                                <th>Status</th>
+                                <th>Due Date</th>
+                                <th>Assigned To</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (correctiveActions.Any())
+                            {
+                                @foreach (var ca in correctiveActions)
+                                {
+                                    <tr>
+                                        <td><span class="badge bg-secondary">@ca.IssueType</span></td>
+                                        <td>@ca.Title</td>
+                                        <td>
+                                            @{
+                                                var badgeClass = ca.Status switch
+                                                {
+                                                    FurniComply.Domain.Enums.CorrectiveActionStatus.Closed => "bg-success",
+                                                    FurniComply.Domain.Enums.CorrectiveActionStatus.Overdue => "bg-danger",
+                                                    _ => "bg-warning text-dark"
+                                                };
+                                            }
+                                            <span class="badge @badgeClass">@ca.Status</span>
+                                        </td>
+                                        <td>@ca.DueAtUtc.ToString("yyyy-MM-dd")</td>
+                                        <td>@ca.AssignedTo</td>
+                                        <td>
+                                            <a class="btn btn-sm btn-outline-secondary" asp-controller="Capa" asp-action="Details" asp-route-id="@ca.Id">View</a>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                            else
+                            {
+                                <tr>
+                                    <td colspan="6" class="text-center py-4">No CAPA findings found.</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (isSuperAdmin)
+{
+    <!-- Override Modal -->
+    <div class="modal fade" id="overrideModal" tabindex="-1" aria-labelledby="overrideModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="overrideModalLabel">@(Model.OverrideRequestActive ? "Approve Override Request" : "Super Admin Override")</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form asp-action="ToggleOverride" method="post">
+                    <div class="modal-body">
+                        <input type="hidden" name="id" value="@Model.Id" />
+                        @if (Model.IsOverrideActive)
+                        {
+                            <p>Are you sure you want to disable the override for <strong>@Model.Name</strong>? The system will resume automated compliance tracking and status downgrades.</p>
+                        }
+                        else
+                        {
+                            if (Model.OverrideRequestActive)
+                            {
+                                <p><strong>@Model.RequestedBy</strong> requested this override on @Model.RequestedAtUtc?.ToLocalTime().ToString("yyyy-MM-dd"):</p>
+                                <blockquote class="bg-light p-2 border-start border-4 border-info">
+                                    <em>"@Model.OverrideRequestReason"</em>
+                                </blockquote>
+                                <p>You can approve this by confirming or editing the final override reason below:</p>
+                            }
+                            else
+                            {
+                                <p>Enabling an override allows <strong>@Model.Name</strong> to remain <strong>Active/Approved</strong> even if they have missing or expired documents.</p>
+                            }
+                            
+                            <div class="mb-3">
+                                <label for="reason" class="form-label">Final Override Reason</label>
+                                <textarea class="form-control" name="reason" rows="3" required placeholder="Explain why this override is necessary...">@Model.OverrideRequestReason</textarea>
+                            </div>
+                        }
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn @(Model.IsOverrideActive ? "btn-danger" : (Model.OverrideRequestActive ? "btn-success" : "btn-dark"))">
+                            @(Model.IsOverrideActive ? "Disable Override" : (Model.OverrideRequestActive ? "Approve & Enable" : "Enable Override"))
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+}
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var perfModal = document.getElementById('performanceModal');
+            if (perfModal) {
+                perfModal.addEventListener('shown.bs.modal', function () {
+                    var tooltips = perfModal.querySelectorAll('[data-bs-toggle="tooltip"]');
+                    tooltips.forEach(function (el) {
+                        var t = bootstrap.Tooltip.getInstance(el);
+                        if (t) t.dispose();
+                        new bootstrap.Tooltip(el);
+                    });
+                });
+            }
+        });
+    </script>
+}

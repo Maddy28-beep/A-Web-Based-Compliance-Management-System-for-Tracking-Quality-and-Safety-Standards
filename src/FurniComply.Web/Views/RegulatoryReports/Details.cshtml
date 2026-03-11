@@ -1,0 +1,298 @@
+@model FurniComply.Domain.Entities.RegulatoryReport
+@using FurniComply.Domain.Enums
+
+@{
+    ViewData["Title"] = "Report Details";
+    var canApproveSupplier = User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.Admin);
+    var supplierApprovalStatus = ViewBag.SupplierApprovalStatus as SupplierApprovalStatus? ?? Model.Supplier?.ApprovalStatus;
+    var supplierNeedsApproval = Model.SupplierId.HasValue && supplierApprovalStatus == SupplierApprovalStatus.Pending;
+    var isOperationalAdmin = User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.Admin) &&
+        !User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.SuperAdmin);
+    var canManageReports = User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.ComplianceManager) &&
+        !User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.SuperAdmin);
+    var canOverrideApproval = User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.SuperAdmin);
+    var canExportReports = User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.Admin) ||
+        User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.ComplianceManager) ||
+        User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.SuperAdmin);
+    var statusName = Model.ReportStatus?.Name ?? "";
+    var supplierName = Model.Supplier?.Name ?? "All suppliers";
+    var backAction = Model.IsDeleted ? "Archived" : "Index";
+    var overrideAudit = ViewBag.OverrideAudit as FurniComply.Domain.Entities.AuditLog;
+    var adminApprovalBlocker = ViewBag.AdminApprovalBlocker as string;
+    var supplierDocuments = ViewBag.SupplierDocuments as IEnumerable<FurniComply.Domain.Entities.SupplierComplianceDocument> ?? Enumerable.Empty<FurniComply.Domain.Entities.SupplierComplianceDocument>();
+    var recentSupplierChecks = ViewBag.RecentSupplierChecks as IEnumerable<FurniComply.Domain.Entities.ComplianceCheck> ?? Enumerable.Empty<FurniComply.Domain.Entities.ComplianceCheck>();
+    var supplierOpenCapaCount = Convert.ToInt32(ViewBag.SupplierOpenCapaCount ?? 0);
+    var supplierHighAlertCount = Convert.ToInt32(ViewBag.SupplierHighAlertCount ?? 0);
+    var uploadedDocCount = supplierDocuments.Count(d => !string.IsNullOrWhiteSpace(d.FileUrl) && d.FileUrl.StartsWith("/uploads/"));
+    var missingDocCount = supplierDocuments.Count(d => d.DocumentStatus == FurniComply.Domain.Enums.SupplierDocumentStatus.Missing);
+    var pendingDocCount = supplierDocuments.Count(d => d.DocumentStatus == FurniComply.Domain.Enums.SupplierDocumentStatus.PendingReview);
+    var expiredDocCount = supplierDocuments.Count(d => d.DocumentStatus == FurniComply.Domain.Enums.SupplierDocumentStatus.Expired || (d.ExpiryDateUtc.HasValue && d.ExpiryDateUtc.Value.Date < DateTime.UtcNow.Date));
+    var verifiedDocCount = supplierDocuments.Count(d => d.DocumentStatus == FurniComply.Domain.Enums.SupplierDocumentStatus.Verified);
+}
+
+<header class="hero report-hero">
+    <div>
+        <p class="eyebrow">Regulatory Reporting</p>
+        <h1>@Model.ReportType</h1>
+        <p class="lede">Status @(statusName != "" ? statusName : "-") · Period @Model.PeriodStartUtc.ToString("yyyy-MM-dd") to @Model.PeriodEndUtc.ToString("yyyy-MM-dd")</p>
+        <div class="page-meta" aria-label="Page context">
+            <span class="meta-pill"><i class="fa-solid fa-building"></i> Supplier @supplierName</span>
+            <span class="meta-pill"><i class="fa-solid fa-clock"></i> Dates shown in local time</span>
+            @if (overrideAudit != null)
+            {
+                <span class="meta-pill"><i class="fa-solid fa-shield-halved"></i> Approved via SuperAdmin override</span>
+            }
+            @if (Model.IsDeleted)
+            {
+                <span class="meta-pill"><i class="fa-solid fa-box-archive"></i> Archived</span>
+            }
+        </div>
+    </div>
+    <div class="hero-actions report-detail-actions">
+        @if (statusName == "Draft" || statusName == "Rejected")
+        {
+            @* Row 1: Excel, PDF. Row 2: Back, Submit *@
+            <div class="report-actions-row report-actions-export">
+                @if (!Model.IsDeleted && canExportReports)
+                {
+                    <a class="btn export-btn export-btn-excel" asp-action="ExportSingle" asp-route-id="@Model.Id" asp-route-format="excel"><i class="fa-solid fa-table"></i> Excel</a>
+                    <a class="btn export-btn export-btn-pdf" asp-action="ExportSingle" asp-route-id="@Model.Id" asp-route-format="pdf"><i class="fa-solid fa-file-arrow-down"></i> PDF</a>
+                }
+            </div>
+            <div class="report-actions-row report-actions-secondary">
+                <a class="btn btn-outline-secondary" asp-action="@backAction"><i class="fa-solid fa-arrow-left"></i> Back</a>
+                @if (!Model.IsDeleted && canManageReports)
+                {
+                    <form asp-action="Submit" method="post" class="d-inline" data-confirm="report-submit">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@Model.Id" />
+                        <button type="submit" class="btn btn-success"><i class="fa-solid fa-paper-plane"></i> Submit</button>
+                    </form>
+                }
+            </div>
+        }
+        else
+        {
+            @* Submitted: Approve/Reject on row 1; PDF, Excel, Back on row 2 *@
+            <div class="report-actions-row report-actions-approval">
+                @if (!Model.IsDeleted)
+                {
+                    @if ((User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.Admin) || User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.ComplianceManager)) && statusName == "Submitted")
+                    {
+                        if (string.IsNullOrWhiteSpace(adminApprovalBlocker))
+                        {
+                            <form asp-action="Approve" method="post" class="d-inline" data-confirm="report-approve">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@Model.Id" />
+                                <button type="submit" class="btn btn-success"><i class="fa-solid fa-check"></i> Approve Report</button>
+                            </form>
+                            <form asp-action="Reject" method="post" class="d-inline" data-confirm="report-reject">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@Model.Id" />
+                                <button type="submit" class="btn btn-danger"><i class="fa-solid fa-xmark"></i> Reject Report</button>
+                            </form>
+                        }
+                    }
+                }
+                else if (canManageReports)
+                {
+                    <form asp-action="Restore" method="post" class="d-inline" data-confirm="restore">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@Model.Id" />
+                        <button type="submit" class="btn btn-primary"><i class="fa-solid fa-rotate-left"></i> Restore Report</button>
+                    </form>
+                }
+            </div>
+            <div class="report-actions-row report-actions-export">
+                @if (!Model.IsDeleted && canExportReports)
+                {
+                    <a class="btn export-btn export-btn-excel" asp-action="ExportSingle" asp-route-id="@Model.Id" asp-route-format="excel"><i class="fa-solid fa-table"></i> Excel</a>
+                    <a class="btn export-btn export-btn-pdf" asp-action="ExportSingle" asp-route-id="@Model.Id" asp-route-format="pdf"><i class="fa-solid fa-file-arrow-down"></i> PDF</a>
+                }
+            </div>
+            <div class="report-actions-row report-actions-secondary">
+                <a class="btn btn-outline-secondary" asp-action="@backAction"><i class="fa-solid fa-arrow-left"></i> Back</a>
+                @if (!Model.IsDeleted && canApproveSupplier && supplierNeedsApproval && Model.SupplierId.HasValue)
+                {
+                    <form asp-controller="Suppliers" asp-action="Approve" method="post" class="d-inline" data-confirm="supplier-approve">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@Model.SupplierId" />
+                        <button type="submit" class="btn btn-success"><i class="fa-solid fa-check"></i> Approve Supplier</button>
+                    </form>
+                    <form asp-controller="Suppliers" asp-action="Reject" method="post" class="d-inline" data-confirm="supplier-reject">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@Model.SupplierId" />
+                        <button type="submit" class="btn btn-outline-danger"><i class="fa-solid fa-xmark"></i> Reject Supplier</button>
+                    </form>
+                }
+            </div>
+        }
+    </div>
+</header>
+
+@if (isOperationalAdmin && statusName == "Submitted" && !string.IsNullOrWhiteSpace(adminApprovalBlocker))
+{
+    <section class="detail-card">
+        <h3>Approval Blocked</h3>
+        <p class="section-meta">@adminApprovalBlocker</p>
+        <p class="section-meta">Resolve risk findings or request SuperAdmin override with mandatory reason.</p>
+    </section>
+}
+
+<div class="detail-card">
+    <dl>
+        <dt>Summary</dt>
+        <dd>@Model.Summary</dd>
+        <dt>Supplier</dt>
+        <dd>@supplierName</dd>
+        <dt>Submitted At (Local time)</dt>
+        <dd>@(Model.SubmittedAtUtc?.ToString("yyyy-MM-dd") ?? "-")</dd>
+    </dl>
+</div>
+
+@if (canApproveSupplier && supplierNeedsApproval && Model.SupplierId.HasValue)
+{
+    <section class="detail-card supplier-approval-card">
+        <h3><i class="fa-solid fa-stamp text-warning"></i> Supplier Pending Approval</h3>
+        <p class="section-meta mb-3">@(Model.Supplier?.Name) has not yet been approved. As Admin, you can approve or reject the supplier from this report.</p>
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+            <form asp-controller="Suppliers" asp-action="Approve" method="post" class="d-inline" data-confirm="supplier-approve">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" value="@Model.SupplierId" />
+                <button type="submit" class="btn btn-success"><i class="fa-solid fa-check"></i> Approve Supplier</button>
+            </form>
+            <form asp-controller="Suppliers" asp-action="Reject" method="post" class="d-inline" data-confirm="supplier-reject">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" value="@Model.SupplierId" />
+                <button type="submit" class="btn btn-outline-danger"><i class="fa-solid fa-xmark"></i> Reject Supplier</button>
+            </form>
+            <a class="btn btn-outline-secondary" asp-controller="Suppliers" asp-action="Details" asp-route-id="@Model.SupplierId"><i class="fa-solid fa-industry"></i> View Supplier Profile</a>
+        </div>
+    </section>
+}
+
+@if (Model.SupplierId.HasValue && Model.SupplierId.Value != Guid.Empty)
+{
+    <section class="detail-card">
+        <h3>Approval Evidence</h3>
+        <p class="section-meta">Review supplier documents and recent compliance activity before deciding.</p>
+        <div class="page-meta" aria-label="Approval evidence summary">
+            <span class="meta-pill"><i class="fa-solid fa-folder-tree"></i> @supplierDocuments.Count() required docs</span>
+            <span class="meta-pill"><i class="fa-solid fa-cloud-arrow-up"></i> @uploadedDocCount uploaded</span>
+            <span class="meta-pill"><i class="fa-solid fa-circle-check"></i> @verifiedDocCount verified</span>
+            <span class="meta-pill"><i class="fa-solid fa-hourglass-half"></i> @pendingDocCount pending</span>
+            <span class="meta-pill"><i class="fa-solid fa-circle-exclamation"></i> @missingDocCount missing</span>
+            <span class="meta-pill"><i class="fa-solid fa-triangle-exclamation"></i> @expiredDocCount expired</span>
+            <span class="meta-pill"><i class="fa-solid fa-list-check"></i> @supplierOpenCapaCount open CAPA</span>
+            <span class="meta-pill"><i class="fa-solid fa-bell"></i> @supplierHighAlertCount high/critical alerts</span>
+        </div>
+        <div class="hero-actions report-evidence-actions">
+            <a class="btn btn-outline-secondary" asp-controller="Suppliers" asp-action="Details" asp-route-id="@Model.SupplierId"><i class="fa-solid fa-industry"></i> Supplier Profile</a>
+            <a class="btn btn-outline-secondary" asp-controller="Suppliers" asp-action="Documents" asp-route-supplierId="@Model.SupplierId"><i class="fa-solid fa-folder-open"></i> Supplier Documents</a>
+        </div>
+
+        @if (supplierDocuments.Any())
+        {
+            <div class="detail-table-wrap mt-3">
+                <table class="table compact">
+                    <thead>
+                        <tr>
+                            <th>Document</th>
+                            <th>Status</th>
+                            <th>Expiry (Local time)</th>
+                            <th class="table-cell-center">File</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var doc in supplierDocuments.Take(6))
+                        {
+                            var hasFile = !string.IsNullOrWhiteSpace(doc.FileUrl) && doc.FileUrl.StartsWith("/uploads/");
+                            <tr>
+                                <td>@doc.DocumentType</td>
+                                <td><span class="status-chip muted">@doc.DocumentStatus</span></td>
+                                <td>@(doc.ExpiryDateUtc.HasValue ? doc.ExpiryDateUtc.Value.ToString("MMM dd, yyyy") : "-")</td>
+                                <td class="table-cell-center" style="white-space:nowrap;">
+                                    @if (hasFile)
+                                    {
+                                        <a class="icon-action" asp-controller="Suppliers" asp-action="DocumentPreview" asp-route-id="@doc.Id" target="_blank" title="Preview"><i class="fa-solid fa-eye"></i></a>
+                                        <a class="icon-action" asp-controller="Suppliers" asp-action="DocumentDownload" asp-route-id="@doc.Id" title="Download"><i class="fa-solid fa-download"></i></a>
+                                    }
+                                    else
+                                    {
+                                        <span class="table-secondary-text">No upload</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        @if (recentSupplierChecks.Any())
+        {
+            <div class="detail-table-wrap mt-3">
+                <table class="table compact">
+                    <thead>
+                        <tr>
+                            <th>Checked</th>
+                            <th>Policy</th>
+                            <th>Status</th>
+                            <th>Risk</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var check in recentSupplierChecks.Take(5))
+                        {
+                            <tr>
+                                <td>@check.CheckedAtUtc.ToString("MMM dd, yyyy")</td>
+                                <td>@(check.Policy?.Title ?? "-")</td>
+                                <td>@(check.ComplianceStatus?.Name ?? "-")</td>
+                                <td>@(check.RiskLevel?.Name ?? "-")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+}
+
+@if (overrideAudit != null)
+{
+    <section class="detail-card report-override-audit-note report-override-audit-accent">
+        <h3>Report Approval Override</h3>
+        <p class="section-meta">This specific report was approved through a Regulatory Report Override.</p>
+        <dl>
+            <dt>Approved By</dt>
+            <dd>@overrideAudit.Actor</dd>
+            <dt>Approved On (Local time)</dt>
+            <dd>@overrideAudit.TimestampUtc.ToLocalTime().ToString("yyyy-MM-dd hh:mm tt")</dd>
+            <dt>Override Reason</dt>
+            <dd>@overrideAudit.Details</dd>
+        </dl>
+        <div class="alert alert-info mb-0 mt-3">
+            <strong>Note:</strong> This override is specific to <strong>this report only</strong>. It does <strong>not</strong> enable the global Procurement Document Override for the supplier.
+        </div>
+    </section>
+}
+
+@if (canOverrideApproval && statusName == "Submitted" && !Model.IsDeleted)
+{
+    <section class="detail-card report-override-panel">
+        <h3>Regulatory Report Override</h3>
+        <p class="section-meta">As SuperAdmin, you can override the standard approval blockers for this report.</p>
+        <form asp-action="ApproveOverride" method="post" class="report-override-form">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="id" value="@Model.Id" />
+            <div class="mb-3">
+                <label for="reason" class="form-label">Report Override Reason</label>
+                <textarea class="form-control report-override-reason" name="reason" rows="4" required placeholder="Explain why this specific report should be accepted despite issues..."></textarea>
+            </div>
+            <div class="report-override-controls">
+                <a class="btn btn-outline-secondary" asp-action="@backAction">Cancel</a>
+                <button type="submit" class="btn btn-warning"><i class="fa-solid fa-shield-halved"></i> Apply Report Override</button>
+            </div>
+        </form>
+    </section>
+}

@@ -1,0 +1,200 @@
+@model IEnumerable<FurniComply.Domain.Entities.RegulatoryReport>
+@{
+    Layout = null;
+    var now = ((DateTime?)ViewBag.GeneratedAtUtc ?? DateTime.UtcNow).ToLocalTime();
+    var reports = Model.ToList();
+    var submitted = reports.Count(x => string.Equals(x.ReportStatus?.Name, "Submitted", StringComparison.OrdinalIgnoreCase));
+    var accepted = reports.Count(x => string.Equals(x.ReportStatus?.Name, "Accepted", StringComparison.OrdinalIgnoreCase));
+    var rejected = reports.Count(x => string.Equals(x.ReportStatus?.Name, "Rejected", StringComparison.OrdinalIgnoreCase));
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FurniComply Regulatory Report Pack</title>
+    <style>
+        :root {
+            --ink: #1f2623;
+            --muted: #5c6861;
+            --brand: #0f3b2f;
+            --paper: #fcfbf7;
+            --line: #d6ddd8;
+            --accent: #d99a4e;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            color: var(--ink);
+            font-family: "Segoe UI", "Trebuchet MS", sans-serif;
+            background: linear-gradient(140deg, #edf2ef 0%, #f8f4ea 100%);
+        }
+        .page {
+            width: 100%;
+            max-width: 1100px;
+            margin: 20px auto;
+            background: var(--paper);
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 26px;
+        }
+        .top {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            border-bottom: 2px solid var(--line);
+            padding-bottom: 14px;
+        }
+        .kicker {
+            letter-spacing: .18em;
+            text-transform: uppercase;
+            color: #51697b;
+            font-size: 12px;
+            font-weight: 700;
+        }
+        .title {
+            margin: 6px 0 0;
+            font-size: 34px;
+            line-height: 1.1;
+            font-family: "Georgia", "Times New Roman", serif;
+            color: #1b2320;
+        }
+        .meta {
+            text-align: right;
+            color: var(--muted);
+            font-size: 13px;
+        }
+        .actions {
+            margin-top: 14px;
+            display: flex;
+            gap: 10px;
+        }
+        .btn {
+            border: 1px solid #0f3b2f;
+            color: #0f3b2f;
+            background: white;
+            padding: 10px 14px;
+            border-radius: 10px;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .btn.primary {
+            background: #0f3b2f;
+            color: #fff;
+        }
+        .stats {
+            margin-top: 16px;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+        .stat {
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 12px;
+            background: #fff;
+        }
+        .stat small {
+            color: var(--muted);
+            display: block;
+            text-transform: uppercase;
+            letter-spacing: .07em;
+        }
+        .stat strong {
+            display: block;
+            margin-top: 4px;
+            font-size: 24px;
+            color: var(--brand);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 18px;
+            font-size: 14px;
+        }
+        th, td {
+            text-align: left;
+            border-bottom: 1px solid var(--line);
+            padding: 11px 8px;
+            vertical-align: top;
+        }
+        th {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            color: #496078;
+        }
+        .status {
+            display: inline-block;
+            padding: 3px 9px;
+            border-radius: 999px;
+            font-size: 12px;
+            border: 1px solid var(--line);
+            background: #f6f7f6;
+        }
+        .foot {
+            margin-top: 12px;
+            color: var(--muted);
+            font-size: 12px;
+        }
+        @@media print {
+            body { background: #fff; }
+            .page { margin: 0; border: 0; border-radius: 0; padding: 0; max-width: none; }
+            .actions { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <div class="top">
+            <div>
+                <div class="kicker">FurniComply</div>
+                <h1 class="title">Regulatory Compliance Report Pack</h1>
+            </div>
+            <div class="meta">
+                Generated: @now.ToString("yyyy-MM-dd hh:mm tt") local time
+            </div>
+        </div>
+
+        <div class="actions">
+            <button class="btn primary" onclick="window.print()">Print / Save as PDF</button>
+            <a class="btn" href="/RegulatoryReports"><i class="fa-solid fa-arrow-left"></i> Back to Reports</a>
+        </div>
+
+        <div class="stats">
+            <div class="stat"><small>Total Reports</small><strong>@reports.Count</strong></div>
+            <div class="stat"><small>Submitted</small><strong>@submitted</strong></div>
+            <div class="stat"><small>Accepted</small><strong>@accepted</strong></div>
+            <div class="stat"><small>Rejected</small><strong>@rejected</strong></div>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Report Type</th>
+                    <th>Supplier</th>
+                    <th>Period</th>
+                    <th>Status</th>
+                    <th>Submitted</th>
+                    <th>Summary</th>
+                </tr>
+            </thead>
+            <tbody>
+            @foreach (var report in reports)
+            {
+                <tr>
+                    <td>@report.ReportType</td>
+                    <td>@(report.Supplier?.Name ?? "-")</td>
+                    <td>@report.PeriodStartUtc.ToString("yyyy-MM-dd") to @report.PeriodEndUtc.ToString("yyyy-MM-dd")</td>
+                    <td><span class="status">@(report.ReportStatus?.Name ?? "-")</span></td>
+                    <td>@(report.SubmittedAtUtc?.ToString("yyyy-MM-dd") ?? "-")</td>
+                    <td>@(string.IsNullOrWhiteSpace(report.Summary) ? "-" : report.Summary)</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+        <div class="foot">This export page is optimized for browser Print to PDF.</div>
+    </div>
+</body>
+</html>

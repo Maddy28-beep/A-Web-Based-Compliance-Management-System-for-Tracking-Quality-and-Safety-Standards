@@ -1,0 +1,91 @@
+@model FurniComply.Domain.Entities.Supplier
+
+@{
+    ViewData["Title"] = "Edit Supplier";
+    var canSetApprovalStatus =
+        !User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.SuperAdmin) &&
+        User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.Admin);
+}
+
+<header class="page-header">
+    <div>
+        <p class="eyebrow">Procurement</p>
+        <h1>Edit Supplier</h1>
+        <p class="lede">Update supplier details and compliance status.</p>
+        <div class="page-meta" aria-label="Page context">
+            <span class="meta-pill"><i class="fa-solid fa-clock"></i> Dates shown in local time</span>
+            <span class="meta-pill"><i class="fa-solid fa-hashtag"></i> @Model.Id</span>
+        </div>
+    </div>
+    <div class="page-header-actions">
+        <a class="btn btn-outline-secondary" asp-action="Details" asp-route-id="@Model.Id"><i class="fa-solid fa-arrow-left"></i> Back</a>
+    </div>
+</header>
+
+<div class="form-card">
+    <form asp-action="Edit" method="post">
+        <input type="hidden" asp-for="Id" />
+        <div class="form-grid supplier-form-grid">
+            <div class="form-group">
+                <label asp-for="Name">Name</label>
+                <input asp-for="Name" />
+            </div>
+            <div class="form-group">
+                <label asp-for="SupplierCategoryId">Category</label>
+                <select asp-for="SupplierCategoryId" asp-items="ViewBag.SupplierCategoryId" class="select2-enable">
+                    <option value="">-- Select Category --</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label asp-for="ContactEmail">Contact Email</label>
+                <input asp-for="ContactEmail" />
+            </div>
+            <div class="form-group">
+                <label asp-for="Address">Office Address</label>
+                <input asp-for="Address" placeholder="Street, City, Province..." />
+            </div>
+            <div class="form-group">
+                <label asp-for="Status">Status</label>
+                <select asp-for="Status" asp-items="Html.GetEnumSelectList<FurniComply.Domain.Enums.SupplierStatus>()"></select>
+                <div class="field-help">Use OnHold for temporary pause; use Suspended for suppliers blocked due to compliance or performance risk.</div>
+            </div>
+            <div class="form-group">
+                <label asp-for="ApprovalStatus">Approval Status</label>
+                @if (canSetApprovalStatus)
+                {
+                    <select asp-for="ApprovalStatus" asp-items="Html.GetEnumSelectList<FurniComply.Domain.Enums.SupplierApprovalStatus>()"></select>
+                }
+                else
+                {
+                    <input value="@Model.ApprovalStatus" readonly />
+                    <input type="hidden" asp-for="ApprovalStatus" />
+                }
+            </div>
+            <div class="form-group">
+                <label asp-for="RenewalDueUtc">Renewal Due (Local time)</label>
+                <input asp-for="RenewalDueUtc" type="date" />
+                <div class="field-help">Auto-computed from earliest document expiry, but can be adjusted for contract schedule.</div>
+            </div>
+            <div class="form-group">
+                <label asp-for="LastReviewUtc">Last Review (Local time)</label>
+                <input asp-for="LastReviewUtc" type="date" />
+                <div class="field-help">Tracks last supplier compliance review date.</div>
+            </div>
+        </div>
+        <label>Certifications</label>
+        <div class="checkbox-grid">
+            @foreach (var option in (string[])ViewBag.CertificationOptions)
+            {
+                var selected = ((System.Collections.Generic.HashSet<string>)ViewBag.SelectedCertifications).Contains(option);
+                <label class="checkbox-item">
+                    <input type="checkbox" name="certificationSelections" value="@option" checked="@selected" />
+                    <span>@option</span>
+                </label>
+            }
+        </div>
+        <div class="form-actions">
+            <a class="btn btn-outline-secondary" asp-action="Details" asp-route-id="@Model.Id"><i class="fa-solid fa-xmark"></i> Cancel</a>
+            <button class="btn btn-success" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save</button>
+        </div>
+    </form>
+</div>

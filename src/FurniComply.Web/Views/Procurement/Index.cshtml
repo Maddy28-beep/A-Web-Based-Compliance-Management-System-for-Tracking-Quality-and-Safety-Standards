@@ -1,0 +1,183 @@
+@using FurniComply.Domain.Enums
+@using FurniComply.Infrastructure.Persistence
+@inject AppDbContext Db
+@{
+    ViewData["Title"] = "Procurement Task Hub";
+
+    var suppliers = Db.Suppliers
+        .Where(s => !s.IsDeleted)
+        .OrderBy(s => s.Name)
+        .Select(s => new
+        {
+            s.Id,
+            s.Name,
+            s.Status,
+            s.ApprovalStatus,
+            s.Rating,
+            Documents = Db.SupplierComplianceDocuments.Count(d => d.SupplierId == s.Id)
+        })
+        .Take(25)
+        .ToList();
+
+    var approvalQueue = suppliers
+        .Where(s => s.ApprovalStatus == SupplierApprovalStatus.Pending)
+        .Take(10)
+        .ToList();
+
+    var riskRows = suppliers
+        .Where(s => s.Status == SupplierStatus.OnHold || s.Rating < 3m)
+        .OrderBy(s => s.Rating)
+        .Take(10)
+        .ToList();
+
+    var documentRows = Db.SupplierComplianceDocuments
+        .OrderBy(d => d.ExpiryDateUtc)
+        .Select(d => new
+        {
+            d.Id,
+            SupplierName = d.Supplier != null ? d.Supplier.Name : "-",
+            d.DocumentType,
+            d.DocumentStatus,
+            d.ExpiryDateUtc
+        })
+        .Take(10)
+        .ToList();
+}
+
+<section class="hero module-header">
+    <div>
+        <p class="eyebrow">Procurement</p>
+        <h1>Procurement Task Hub</h1>
+        <p class="lede">Items needing attention: approval queue, risk list, and document follow-ups. Full supplier list is in <a asp-controller="Suppliers" asp-action="Index">Suppliers</a>.</p>
+    </div>
+    <div class="hero-actions module-header-actions" style="flex-wrap:nowrap; align-items:center;">
+        <a class="btn btn-success px-3" asp-controller="Suppliers" asp-action="Index"><i class="fa-solid fa-industry"></i> All Suppliers</a>
+        <a class="btn btn-success px-3" asp-controller="Suppliers" asp-action="Documents"><i class="fa-solid fa-folder-open"></i> All Documents</a>
+    </div>
+</section>
+
+<section class="procurement-work-grid">
+    <div class="table-card">
+        <div class="table-card-header">
+            <div>
+                <h3 class="table-card-title">Approval Queue</h3>
+                <p class="table-card-subtitle">Suppliers waiting for approval decision.</p>
+            </div>
+        </div>
+        <table class="table procurement-table">
+            <thead>
+                <tr>
+                    <th>Supplier</th>
+                    <th>Status</th>
+                    <th class="text-center">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (approvalQueue.Any())
+                {
+                    @foreach (var row in approvalQueue)
+                    {
+                        <tr>
+                            <td>@row.Name</td>
+                            <td>@row.ApprovalStatus</td>
+                            <td class="actions-cell supplier-doc-actions">
+                                <a class="btn btn-outline-secondary btn-sm" asp-controller="Suppliers" asp-action="Details" asp-route-id="@row.Id">Review</a>
+                            </td>
+                        </tr>
+                    }
+                }
+                else
+                {
+                    <tr><td colspan="3" class="table-secondary-text">No pending approvals.</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <div class="table-card">
+        <div class="table-card-header">
+            <div>
+                <h3 class="table-card-title">Risk Table</h3>
+                <p class="table-card-subtitle">Suppliers currently in high-risk attention range.</p>
+            </div>
+        </div>
+        <table class="table procurement-table">
+            <thead>
+                <tr>
+                    <th>Supplier</th>
+                    <th>Risk</th>
+                    <th class="text-center">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (riskRows.Any())
+                {
+                    @foreach (var row in riskRows)
+                    {
+                        var risk = row.Rating >= 4m ? "Low" : (row.Rating >= 3m ? "Medium" : "High");
+                        <tr>
+                            <td>@row.Name</td>
+                            <td>@risk</td>
+                            <td class="actions-cell supplier-doc-actions">
+                                <a class="btn btn-outline-secondary btn-sm" asp-controller="Suppliers" asp-action="Details" asp-route-id="@row.Id">Inspect</a>
+                            </td>
+                        </tr>
+                    }
+                }
+                else
+                {
+                    <tr><td colspan="3" class="table-secondary-text">No active risk items.</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="table-card">
+    <div class="table-card-header">
+        <div>
+            <h3 class="table-card-title">Document Status List</h3>
+            <p class="table-card-subtitle">Recent document entries with status and expiry visibility.</p>
+        </div>
+    </div>
+    <table class="table procurement-table">
+        <thead>
+            <tr>
+                <th>Supplier</th>
+                <th>Document</th>
+                <th>Status</th>
+                <th>Expiry</th>
+                <th class="text-center">Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var d in documentRows)
+            {
+                <tr>
+                    <td>@d.SupplierName</td>
+                    <td>@d.DocumentType</td>
+                    <td>@d.DocumentStatus</td>
+                    <td>@(d.ExpiryDateUtc.HasValue ? d.ExpiryDateUtc.Value.ToString("MMM dd, yyyy") : "-")</td>
+                    <td class="actions-cell supplier-doc-actions">
+                        <a class="btn btn-outline-secondary btn-sm" asp-controller="Suppliers" asp-action="Documents">Open</a>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</section>
+
+<section class="form-card">
+    <div class="table-card-header">
+        <div>
+            <h3 class="table-card-title">Bulk Actions</h3>
+            <p class="table-card-subtitle">Fast navigation for common procurement operations.</p>
+        </div>
+    </div>
+    <div class="hero-actions module-header-actions">
+        <a class="btn btn-outline-secondary" asp-controller="Suppliers" asp-action="Index"><i class="fa-solid fa-pen-to-square"></i> Bulk Review Suppliers</a>
+        <a class="btn btn-outline-secondary" asp-controller="Suppliers" asp-action="Documents"><i class="fa-solid fa-file-circle-check"></i> Bulk Document Follow-up</a>
+        <a class="btn btn-outline-secondary" asp-controller="Policies" asp-action="Index"><i class="fa-solid fa-file-lines"></i> Reference Policies</a>
+    </div>
+</section>
+

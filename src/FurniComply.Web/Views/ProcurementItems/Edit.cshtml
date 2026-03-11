@@ -1,0 +1,110 @@
+@model FurniComply.Domain.Entities.ProcurementItem
+
+@{
+    ViewData["Title"] = "Edit Order Item";
+    var itemNameSuggestions = (ViewBag.ItemNameSuggestions as IEnumerable<string> ?? Enumerable.Empty<string>()).ToList();
+    var qualitySuggestions = (ViewBag.QualityStandardSuggestions as IEnumerable<string> ?? Enumerable.Empty<string>()).ToList();
+    var itemCatalogJson = ViewBag.ItemCatalogJson as string ?? "[]";
+}
+
+<section class="hero">
+    <div>
+        <p class="eyebrow">Procurement</p>
+        <h1>Edit Order Item</h1>
+        <p class="lede">Update line item details and standards.</p>
+    </div>
+</section>
+
+<div class="form-card">
+    <form asp-action="Edit" method="post">
+        <input type="hidden" asp-for="Id" />
+        <div class="form-grid procurement-item-form-grid">
+            <label>Order
+                <select asp-for="ProcurementOrderId" asp-items="ViewBag.ProcurementOrderId"></select>
+            </label>
+            <label>Item Name
+                <select asp-for="ItemName" id="ItemName">
+                    <option value="">Select item...</option>
+                    <option value="__new__">+ New item (enter name below)</option>
+                    @foreach (var option in itemNameSuggestions)
+                    {
+                        <option value="@option">@option</option>
+                    }
+                </select>
+            </label>
+            <label id="CustomItemNameWrap" class="proc-item-custom-name proc-item-custom-name--hidden">New Item Name
+                <input id="CustomItemName" name="customItemName" />
+            </label>
+            <label>Quantity
+                <input asp-for="Quantity" type="number" />
+            </label>
+            <label>Unit Cost (USD)
+                <div class="input-group po-currency-group">
+                    <span class="input-group-text">$</span>
+                    <input asp-for="UnitCost" type="number" step="0.01" class="form-control po-currency-input" />
+                </div>
+            </label>
+            <label>Quality Standard
+                <select asp-for="QualityStandard" id="QualityStandard">
+                    <option value="">Select quality standard...</option>
+                    @foreach (var option in qualitySuggestions)
+                    {
+                        <option value="@option">@option</option>
+                    }
+                </select>
+            </label>
+        </div>
+        <label>Notes
+            <textarea asp-for="Notes" rows="4"></textarea>
+        </label>
+        <div class="form-actions">
+            <a class="btn btn-outline-secondary" asp-controller="ProcurementOrders" asp-action="Index"><i class="fa-solid fa-xmark"></i> Cancel</a>
+            <button class="btn btn-success" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save</button>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    <script>
+        (function () {
+            const catalog = @Html.Raw(itemCatalogJson);
+            const itemName = document.getElementById("ItemName");
+            const unitCost = document.getElementById("UnitCost");
+            const quality = document.getElementById("QualityStandard");
+
+            itemName?.addEventListener("change", function () {
+                const isNew = itemName.value === "__new__";
+                const customWrap = document.getElementById("CustomItemNameWrap");
+                if (customWrap) {
+                    customWrap.style.display = isNew ? "" : "none";
+                }
+                if (isNew) {
+                    if (unitCost) {
+                        unitCost.value = "";
+                    }
+                    return;
+                }
+                const selected = catalog.find(x => x.Name === itemName.value);
+                if (!selected) {
+                    return;
+                }
+
+                if (unitCost) {
+                    unitCost.value = Number(selected.UnitCost || 0).toFixed(2);
+                }
+
+                if (quality && selected.QualityStandard) {
+                    const existing = Array.from(quality.options).find(o => o.value === selected.QualityStandard);
+                    if (!existing) {
+                        const option = document.createElement("option");
+                        option.value = selected.QualityStandard;
+                        option.textContent = selected.QualityStandard;
+                        quality.appendChild(option);
+                    }
+                    quality.value = selected.QualityStandard;
+                }
+            });
+        })();
+    </script>
+}
+

@@ -1,0 +1,114 @@
+@model IEnumerable<FurniComply.Domain.Entities.ProcurementOrder>
+
+@{
+    ViewData["Title"] = "Archived Orders";
+    var canManageOrders = User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.Procurement) &&
+        !User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.SuperAdmin);
+}
+
+<header class="page-header">
+    <div>
+        <p class="eyebrow">Procurement</p>
+        <h1>Archived Purchase Orders</h1>
+        <p class="lede">Soft-deleted purchase orders retained for audit and potential restoration.</p>
+        <div class="page-meta" aria-label="Page context">
+            <span class="meta-pill"><i class="fa-solid fa-clock"></i> Dates shown in local time</span>
+            <span class="meta-pill"><i class="fa-solid fa-box-archive"></i> @Model.Count() archived</span>
+        </div>
+    </div>
+    <div class="page-header-actions">
+        <a class="btn btn-outline-secondary" asp-action="Index"><i class="fa-solid fa-arrow-left"></i> Back to Active</a>
+    </div>
+</header>
+
+@if (!Model.Any())
+{
+    <section class="empty-state" aria-label="No archived orders">
+        <div class="empty-state-icon"><i class="fa-solid fa-box-archive"></i></div>
+        <div>
+            <h3>No archived orders</h3>
+            <p>Archived purchase orders will appear here for audit history and restoration.</p>
+            <div class="empty-state-actions">
+                <a class="btn btn-outline-secondary" asp-action="Index"><i class="fa-solid fa-arrow-left"></i> Back to Active</a>
+            </div>
+        </div>
+    </section>
+}
+else
+{
+    <div class="table-card">
+        <div class="table-card-header">
+            <div>
+                <h3 class="table-card-title">Archived Orders</h3>
+                <p class="table-card-subtitle">Click a row to open details. Restore is available for authorized roles.</p>
+            </div>
+        </div>
+        <table class="table data-table">
+        <thead>
+            <tr>
+                <th>Order #</th>
+                <th>Supplier</th>
+                <th>Status</th>
+                <th>Archived On</th>
+                <th>Total</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var item in Model)
+        {
+            <tr data-href="@Url.Action("Details", new { id = item.Id })">
+                <td>@item.OrderNumber</td>
+                <td>@item.Supplier?.Name</td>
+                <td>
+                    @{
+                        var statusName = item.ProcurementStatus?.Name ?? "Unknown";
+                        var badgeClass = statusName switch
+                        {
+                            "Draft" => "bg-secondary",
+                            "Submitted" => "bg-primary",
+                            "Approved" => "bg-success",
+                            "Ordered" => "bg-success",
+                            "Received" => "bg-success",
+                            "Rejected" => "bg-danger",
+                            "Cancelled" => "bg-danger",
+                            "Closed" => "bg-dark",
+                            _ => "bg-warning text-dark"
+                        };
+                        var statusAccentClass = statusName == "Ordered" ? "badge-ordered" : "";
+                    }
+                    <span class="badge @badgeClass @statusAccentClass">@statusName.ToUpper()</span>
+                </td>
+                <td>@(item.DeletedAtUtc?.ToString("yyyy-MM-dd") ?? "-")</td>
+                <td>₱@item.TotalAmount.ToString("N2")</td>
+                <td class="actions-cell">
+                    @if (canManageOrders)
+                    {
+                        <form asp-action="Restore" method="post" class="d-inline" data-confirm="restore">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@item.Id" />
+                            <button type="submit" class="btn btn-sm btn-outline-primary">Restore</button>
+                        </form>
+                    }
+                    else
+                    {
+                        <span class="text-muted">-</span>
+                    }
+                </td>
+            </tr>
+        }
+        </tbody>
+        </table>
+    </div>
+}
+
+@section Scripts {
+    <script>
+        $(function () {
+            $('.data-table').DataTable({
+                order: [[3, 'desc']]
+            });
+        });
+    </script>
+}
+

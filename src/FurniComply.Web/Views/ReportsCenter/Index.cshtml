@@ -1,0 +1,76 @@
+@{
+    ViewData["Title"] = "Reports Center";
+}
+
+<header class="hero module-header">
+    <div>
+        <p class="eyebrow">Governance</p>
+        <h1>Reports Center</h1>
+        <p class="lede">Export-ready reporting workspace for compliance, audit, and supplier documentation.</p>
+    </div>
+    <div class="hero-actions module-header-actions">
+        <a class="btn btn-outline-secondary btn-back-dashboard" href="/Dashboard/Index"><i class="fa-solid fa-arrow-left"></i> Back to Dashboard</a>
+    </div>
+</header>
+
+<section class="report-center-grid">
+    <article class="table-card report-center-card">
+        <div class="table-card-header">
+            <div>
+                <h3 class="table-card-title">Supplier Performance</h3>
+                <p class="table-card-subtitle">Quality ratings, delivery performance, and defect rate trends by supplier.</p>
+            </div>
+        </div>
+        <div class="report-center-actions">
+            <a class="btn btn-primary btn-lg px-4" href="/ReportsCenter/SupplierPerformance"><i class="fa-solid fa-star"></i> View Performance</a>
+        </div>
+    </article>
+
+    <article class="table-card report-center-card">
+        <div class="table-card-header">
+            <div>
+                <h3 class="table-card-title">Regulatory Reports</h3>
+                <p class="table-card-subtitle">Submission tracking, approval status, and regulator-ready summaries.</p>
+            </div>
+        </div>
+        <div class="report-center-actions">
+            <a class="btn btn-success btn-lg px-4" href="/RegulatoryReports/Index"><i class="fa-solid fa-chart-bar"></i> Open Reports</a>
+        </div>
+    </article>
+
+    <article class="table-card report-center-card">
+        <div class="table-card-header">
+            <div>
+                <h3 class="table-card-title">Audit Logs</h3>
+                <p class="table-card-subtitle">Immutable activity trail for approvals, overrides, and key record changes.</p>
+            </div>
+        </div>
+        <div class="report-center-actions">
+            <a class="btn btn-outline-secondary btn-lg px-4" href="/AuditLogs/Index"><i class="fa-solid fa-list-check"></i> View Audit Logs</a>
+        </div>
+    </article>
+
+    <article class="table-card report-center-card">
+        <div class="table-card-header">
+            <div>
+                <h3 class="table-card-title">Compliance Checks</h3>
+                <p class="table-card-subtitle">Check-level evidence records with policy, status, and supplier context.</p>
+            </div>
+        </div>
+        <div class="report-center-actions">
+            <a class="btn btn-outline-secondary btn-lg px-4" href="/ComplianceChecks/Index"><i class="fa-solid fa-clipboard-check"></i> View Checks</a>
+        </div>
+    </article>
+
+    <article class="table-card report-center-card">
+        <div class="table-card-header">
+            <div>
+                <h3 class="table-card-title">Supplier Documents</h3>
+                <p class="table-card-subtitle">Verification status, expiry timeline, and supporting compliance files.</p>
+            </div>
+        </div>
+        <div class="report-center-actions">
+            <a class="btn btn-outline-secondary btn-lg px-4" href="/Suppliers/Documents"><i class="fa-solid fa-folder-open"></i> View Documents</a>
+        </div>
+    </article>
+</section>

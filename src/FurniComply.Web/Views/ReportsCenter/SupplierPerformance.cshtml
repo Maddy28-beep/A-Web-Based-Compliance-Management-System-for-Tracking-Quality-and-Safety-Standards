@@ -1,0 +1,100 @@
+@model IEnumerable<FurniComply.Domain.Entities.Supplier>
+@{
+    ViewData["Title"] = "Supplier Performance Report";
+}
+
+<header class="hero module-header">
+    <div>
+        <p class="eyebrow">Reports</p>
+        <h1>Supplier Performance</h1>
+        <p class="lede">Comprehensive view of supplier quality, delivery, and compliance standing.</p>
+    </div>
+    <div class="hero-actions module-header-actions">
+        <a class="btn btn-outline-secondary btn-lg px-4" href="/ReportsCenter/Index"><i class="fa-solid fa-arrow-left"></i> Back to Center</a>
+        <button class="btn export-btn export-btn-pdf" onclick="window.print()"><i class="fa-solid fa-file-arrow-down"></i> PDF</button>
+    </div>
+</header>
+
+<section class="report-content">
+    <div class="table-card">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Supplier</th>
+                        <th class="text-center">Performance Score</th>
+                        <th class="text-center">Quality Rating</th>
+                        <th class="text-center">Delivery Rating</th>
+                        <th class="text-center">Defect Rate</th>
+                        <th class="text-center">Status</th>
+                        <th class="text-center">Risk Level</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var supplier in Model)
+                    {
+                        <tr>
+                            <td>
+                                <div class="fw-bold">@supplier.Name</div>
+                                <div class="small text-muted">@supplier.Code</div>
+                            </td>
+                            <td class="text-center">
+                                <div class="fs-5 fw-bold @(supplier.PerformanceScore >= 4.0m ? "text-success" : supplier.PerformanceScore >= 3.0m ? "text-warning" : "text-danger")">
+                                    @supplier.PerformanceScore.ToString("0.0")
+                                </div>
+                            </td>
+                            <td class="text-center">
+                                @{
+                                    var latestPerf = supplier.Performances.OrderByDescending(p => p.EvaluationDateUtc).FirstOrDefault();
+                                }
+                                @for (int i = 1; i <= 5; i++)
+                                {
+                                    <i class="fa-solid fa-star @(latestPerf != null && i <= latestPerf.QualityRating ? "text-warning" : "text-light")"></i>
+                                }
+                            </td>
+                            <td class="text-center">
+                                @for (int i = 1; i <= 5; i++)
+                                {
+                                    <i class="fa-solid fa-star @(latestPerf != null && i <= latestPerf.DeliveryRating ? "text-warning" : "text-light")"></i>
+                                }
+                            </td>
+                            <td class="text-center">
+                                @(latestPerf?.DefectRate.ToString("0.0") ?? "0.0")%
+                            </td>
+                            <td class="text-center">
+                                <span class="badge @(supplier.Status == FurniComply.Domain.Enums.SupplierStatus.Active ? "bg-success" : (supplier.Status == FurniComply.Domain.Enums.SupplierStatus.OnHold ? "bg-warning" : "bg-danger"))">
+                                    @supplier.Status
+                                </span>
+                            </td>
+                            <td class="text-center">
+                                @{
+                                    var riskName = supplier.RiskLevel?.Name ?? "Unknown";
+                                    var riskClass = riskName == "Low" ? "bg-info" : (riskName == "Medium" ? "bg-warning" : "bg-danger");
+                                }
+                                <span class="badge @riskClass">
+                                    @riskName
+                                </span>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<style>
+    @@media print {
+        .module-header-actions, .navbar, footer {
+            display: none !important;
+        }
+        .module-header {
+            padding: 1rem 0;
+            border-bottom: 2px solid #eee;
+        }
+        .table-card {
+            border: none;
+            box-shadow: none;
+        }
+    }
+</style>

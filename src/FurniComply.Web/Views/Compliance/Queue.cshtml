@@ -1,0 +1,62 @@
+@model IEnumerable<FurniComply.Domain.Entities.ProcurementOrder>
+@{
+    ViewData["Title"] = "Compliance Queue";
+}
+
+<header class="hero">
+    <div>
+        <p class="eyebrow">Compliance Operations</p>
+        <h1>Compliance Queue</h1>
+        <p class="lede">Review approved procurement orders and verify compliance standards before final ordering.</p>
+        <div class="page-meta">
+            <span class="meta-pill"><i class="fa-solid fa-clock"></i> Active Queue</span>
+            <span class="meta-pill"><i class="fa-solid fa-list-check"></i> @Model.Count() pending verification</span>
+        </div>
+    </div>
+    <div class="hero-actions">
+        <a class="btn btn-outline-secondary" asp-action="Index"><i class="fa-solid fa-arrow-left"></i> Workbench</a>
+    </div>
+</header>
+
+@if (!Model.Any())
+{
+    <section class="empty-state">
+        <div class="empty-state-icon"><i class="fa-solid fa-clipboard-check"></i></div>
+        <div>
+            <h3>Queue is clear</h3>
+            <p>There are no approved orders waiting for compliance verification at this time.</p>
+        </div>
+    </section>
+}
+else
+{
+    <div class="table-card">
+        <div class="table-card-header">
+            <div>
+                <h3 class="table-card-title">Approved Orders (Verification Queue)</h3>
+                <p class="table-card-subtitle">Click a row to open details. Orders approved by Admin, awaiting final compliance verification.</p>
+            </div>
+        </div>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Order #</th>
+                    <th>Supplier</th>
+                    <th>Date</th>
+                    <th>Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var order in Model)
+                {
+                    <tr data-href="@Url.Action("Details", "ProcurementOrders", new { id = order.Id })">
+                        <td><strong>@order.OrderNumber</strong></td>
+                        <td>@order.Supplier?.Name</td>
+                        <td>@(order.UpdatedAtUtc?.ToLocalTime().ToString("MMM dd, yyyy") ?? order.CreatedAtUtc.ToLocalTime().ToString("MMM dd, yyyy"))</td>
+                        <td>$@order.TotalAmount.ToString("N2")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

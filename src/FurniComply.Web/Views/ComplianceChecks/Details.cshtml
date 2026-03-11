@@ -1,0 +1,269 @@
+@model FurniComply.Domain.Entities.ComplianceCheck
+@using System.Linq
+@using FurniComply.Domain.Enums
+
+@{
+    ViewData["Title"] = "Compliance Check Details";
+    var canManageChecks =
+        !User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.SuperAdmin) &&
+        (User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.ComplianceManager) ||
+         User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.DepartmentHead));
+    var canVerifyCompliance =
+        !User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.SuperAdmin) &&
+        User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.ComplianceManager);
+    var isNonCompliant = string.Equals(Model.ComplianceStatus?.Name, "Non-Compliant", StringComparison.OrdinalIgnoreCase);
+    var hasHighOrCriticalAlert = ViewBag.HasHighOrCriticalAlert is bool hasAlert && hasAlert;
+    var correctiveActions = (ViewBag.CorrectiveActions as IEnumerable<FurniComply.Domain.Entities.CorrectiveAction> ?? Enumerable.Empty<FurniComply.Domain.Entities.CorrectiveAction>()).ToList();
+    var activeCapa = correctiveActions.FirstOrDefault(c => c.Status != CorrectiveActionStatus.Closed)
+                    ?? correctiveActions.FirstOrDefault();
+    var statusName = Model.ComplianceStatus?.Name ?? "-";
+
+    // Workflow Stages
+    var currentStatus = activeCapa?.Status ?? CorrectiveActionStatus.Open;
+    var isAssigned = activeCapa != null && (currentStatus == CorrectiveActionStatus.Assigned || currentStatus == CorrectiveActionStatus.InProgress || currentStatus == CorrectiveActionStatus.EvidenceSubmitted || currentStatus == CorrectiveActionStatus.Closed);
+    var isStarted = activeCapa != null && (currentStatus == CorrectiveActionStatus.InProgress || currentStatus == CorrectiveActionStatus.EvidenceSubmitted || currentStatus == CorrectiveActionStatus.Closed);
+    var isSubmitted = activeCapa != null && (currentStatus == CorrectiveActionStatus.EvidenceSubmitted || currentStatus == CorrectiveActionStatus.Closed);
+    var isClosed = activeCapa != null && currentStatus == CorrectiveActionStatus.Closed;
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/capa-workflow.css" asp-append-version="true" />
+}
+
+<header class="hero">
+    <div>
+        <p class="eyebrow">Compliance Monitoring</p>
+        <h1>@Model.Policy?.Title</h1>
+        <p class="lede">Status @statusName · Checked @Model.CheckedAtUtc.ToString("yyyy-MM-dd") (Local time)</p>
+        <div class="page-meta" aria-label="Page context">
+            <span class="meta-pill"><i class="fa-solid fa-clock"></i> Dates shown in local time</span>
+            <span class="meta-pill"><i class="fa-solid fa-flag"></i> @statusName</span>
+            @if (isNonCompliant)
+            {
+                <span class="meta-pill"><i class="fa-solid fa-triangle-exclamation"></i> CAPA eligible</span>
+            }
+        </div>
+    </div>
+    <div class="hero-actions">
+        <a class="btn btn-outline-secondary" asp-action="Index"><i class="fa-solid fa-arrow-left"></i> Back</a>
+        @if (canManageChecks)
+        {
+            <a class="btn btn-outline-secondary" asp-action="Edit" asp-route-id="@Model.Id"><i class="fa-solid fa-pen"></i> Edit</a>
+        }
+    </div>
+</header>
+
+<div class="detail-card">
+    <dl>
+        <dt>Policy</dt>
+        <dd>@Model.Policy?.Title</dd>
+        <dt>Status</dt>
+        <dd>@(Model.ComplianceStatus?.Name ?? "-")</dd>
+        <dt>Category</dt>
+        <dd>@(Model.ComplianceCategory?.Name ?? "-")</dd>
+        <dt>Risk Level</dt>
+        <dd>@(Model.RiskLevel?.Name ?? "-")</dd>
+        <dt>Checked Date (Local time)</dt>
+        <dd>@Model.CheckedAtUtc.ToString("yyyy-MM-dd")</dd>
+        <dt>Notes</dt>
+        <dd>@Model.Notes</dd>
+    </dl>
+</div>
+
+@if (isNonCompliant)
+{
+    <div class="detail-card" style="margin-top: 1rem;">
+        <h2 style="margin-top: 0; color: #12372a;"><i class="fa-solid fa-toolbox me-2"></i>Remediation Workflow (CAPA)</h2>
+        
+        @if (hasHighOrCriticalAlert)
+        {
+            <div class="alert alert-danger d-flex align-items-center mb-4">
+                <i class="fa-solid fa-circle-exclamation me-2"></i>
+                <div>High/Critical compliance alert is active for this finding. Remediation is prioritized.</div>
+            </div>
+        }
+
+        <div class="capa-workflow">
+            <!-- Stepper -->
+            <div class="workflow-stepper">
+                <div class="step-item @(isAssigned ? "completed" : "active")">
+                    <div class="step-dot">@(isAssigned ? "✓" : "1")</div>
+                    <div class="step-label">Assignment</div>
+                </div>
+                <div class="step-item @(isClosed ? "completed" : (isStarted ? "completed" : (isAssigned ? "active" : "")))">
+                    <div class="step-dot">@(isStarted ? "✓" : "2")</div>
+                    <div class="step-label">Execution</div>
+                </div>
+                <div class="step-item @(isClosed ? "completed" : (isSubmitted ? "completed" : (isStarted ? "active" : "")))">
+                    <div class="step-dot">@(isSubmitted ? "✓" : "3")</div>
+                    <div class="step-label">Evidence</div>
+                </div>
+                <div class="step-item @(isClosed ? "completed" : (isSubmitted ? "active" : ""))">
+                    <div class="step-dot">@(isClosed ? "✓" : "4")</div>
+                    <div class="step-label">Verification</div>
+                </div>
+            </div>
+
+            <!-- Stage Content -->
+            @if (!isAssigned && canManageChecks)
+            {
+                <div class="workflow-card">
+                    <h3 class="workflow-title">Step 1: Assign Responsibility</h3>
+                    <p class="workflow-desc">Define who is responsible for fixing this finding and set a realistic deadline.</p>
+                    <form asp-action="AssignCorrectiveAction" method="post">
+                        <input type="hidden" name="checkId" value="@Model.Id" />
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Assign To</label>
+                        <select class="form-select" name="assignedTo" required>
+                            <option value="">-- Select Person --</option>
+                            @if (ViewBag.UserOptions != null)
+                            {
+                                foreach (var user in (SelectList)ViewBag.UserOptions)
+                                {
+                                    <option value="@user.Value">@user.Text</option>
+                                }
+                            }
+                        </select>
+                    </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Due in Days</label>
+                                <input class="form-control" type="number" min="1" max="90" name="dueDays" value="7" />
+                            </div>
+                            <div class="col-12">
+                                <button class="btn btn-success px-4" type="submit">Assign CAPA Task</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            }
+            else if (isAssigned && !isStarted && canManageChecks)
+            {
+                <div class="workflow-card">
+                    <h3 class="workflow-title">Step 2: Start Execution</h3>
+                    <p class="workflow-desc">Acknowledge that remediation work has begun. This updates the audit trail.</p>
+                    <div class="mb-3 p-3 bg-light rounded border">
+                        <div class="small text-muted">CURRENT ASSIGNEE</div>
+                        <div class="fw-bold">@(ViewBag.AssignedToFullName ?? activeCapa?.AssignedTo ?? "-")</div>
+                        <div class="small text-muted mt-2">DUE DATE</div>
+                        <div class="fw-bold">@(activeCapa?.DueAtUtc.ToString("MMM dd, yyyy") ?? "-")</div>
+                    </div>
+                    <form asp-controller="Capa" asp-action="Start" method="post">
+                        <input type="hidden" name="id" value="@(activeCapa?.Id ?? Guid.Empty)" />
+                        <button class="btn btn-success px-4" type="submit">Confirm Work Started</button>
+                    </form>
+                </div>
+            }
+            else if (isStarted && !isSubmitted && canManageChecks)
+            {
+                <div class="workflow-card">
+                    <h3 class="workflow-title">Step 3: Submit Evidence</h3>
+                    <p class="workflow-desc">Describe the actions taken to resolve the finding. Be specific for the audit trail.</p>
+                    <form asp-controller="Capa" asp-action="SubmitEvidence" method="post">
+                        <input type="hidden" name="id" value="@(activeCapa?.Id ?? Guid.Empty)" />
+                        <div class="mb-3">
+                            <label class="form-label">Remediation Notes</label>
+                            <textarea class="form-control" name="evidenceNotes" rows="4" placeholder="Detail the structural changes, process updates, or training completed..." required></textarea>
+                        </div>
+                        <button class="btn btn-success px-4" type="submit">Submit for Verification</button>
+                    </form>
+                </div>
+            }
+            else if (isSubmitted && !isClosed)
+            {
+                <div class="workflow-card">
+                    <h3 class="workflow-title">Step 4: Verification & Closure</h3>
+                    @if (canVerifyCompliance)
+                    {
+                        <p class="workflow-desc">Review the evidence below and close the finding if satisfied.</p>
+                        <div class="mb-3 p-3 bg-light rounded border">
+                            <div class="small text-muted">SUBMITTED EVIDENCE</div>
+                            <div class="fst-italic">"@(activeCapa?.EvidenceNotes ?? "-")"</div>
+                        </div>
+                        <form asp-controller="Capa" asp-action="Close" method="post">
+                            <input type="hidden" name="id" value="@(activeCapa?.Id ?? Guid.Empty)" />
+                            <div class="mb-3">
+                                <label class="form-label">Closure Remarks</label>
+                                <textarea class="form-control" name="closureNotes" rows="3" placeholder="Verification and final closure remarks..." required></textarea>
+                            </div>
+                            <button class="btn btn-success px-4" type="submit">Approve & Close Finding</button>
+                        </form>
+                    }
+                    else
+                    {
+                        <div class="alert alert-info mb-0">
+                            <i class="fa-solid fa-hourglass-half me-2"></i>
+                            Evidence has been submitted. Awaiting verification by a Compliance Manager.
+                        </div>
+                    }
+                </div>
+            }
+            else if (isClosed)
+            {
+                <div class="workflow-card bg-success-subtle border-success-subtle">
+                    <h3 class="workflow-title text-success"><i class="fa-solid fa-circle-check me-2"></i>Remediation Complete</h3>
+                    <p class="mb-0">This finding has been successfully remediated and verified.</p>
+                    <div class="mt-3 small">
+                        <strong>CLOSED BY:</strong> Compliance Officer · <strong>DATE:</strong> @(activeCapa?.ClosedAtUtc?.ToString("MMM dd, yyyy") ?? "-")
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@if (correctiveActions.Any())
+{
+    <div class="table-card" style="margin-top: 1rem;">
+        <div class="table-card-header">
+            <div>
+                <h3 class="table-card-title">CAPA Audit Trail</h3>
+                <p class="table-card-subtitle">Chronological record of remediation efforts.</p>
+            </div>
+        </div>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Status</th>
+                    <th>Assigned To</th>
+                    <th>Due</th>
+                    <th>Created</th>
+                    <th>Closed</th>
+                </tr>
+            </thead>
+            <tbody>
+            @foreach (var item in correctiveActions)
+            {
+                <tr>
+                    <td>
+                        <span class="status-chip @(item.Status == CorrectiveActionStatus.Closed ? "good" : (item.Status == CorrectiveActionStatus.Open || item.Status == CorrectiveActionStatus.Assigned ? "warn" : "risk"))">
+                            @item.Status
+                        </span>
+                    </td>
+                    <td>
+                        @if (!string.IsNullOrWhiteSpace(item.AssignedTo))
+                        {
+                            var userNames = ViewBag.UserNames as Dictionary<string, string>;
+                            if (userNames != null && userNames.TryGetValue(item.AssignedTo, out var fullName))
+                            {
+                                @fullName
+                            }
+                            else
+                            {
+                                @item.AssignedTo
+                            }
+                        }
+                        else
+                        {
+                            <text>-</text>
+                        }
+                    </td>
+                    <td>@item.DueAtUtc.ToString("yyyy-MM-dd")</td>
+                    <td>@item.CreatedAtUtc.ToLocalTime().ToString("yyyy-MM-dd hh:mm tt")</td>
+                    <td>@(item.ClosedAtUtc.HasValue ? item.ClosedAtUtc.Value.ToLocalTime().ToString("yyyy-MM-dd hh:mm tt") : "-")</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+}

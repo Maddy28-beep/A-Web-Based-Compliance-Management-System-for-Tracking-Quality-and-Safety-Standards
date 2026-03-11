@@ -1,0 +1,45 @@
+﻿@model FurniComply.Domain.Entities.AuditLog
+
+@{
+    ViewData["Title"] = "Audit Log Details";
+    TimeZoneInfo tz;
+    try
+    {
+        tz = TimeZoneInfo.FindSystemTimeZoneById("Asia/Manila");
+    }
+    catch
+    {
+        try
+        {
+            tz = TimeZoneInfo.FindSystemTimeZoneById("Singapore Standard Time");
+        }
+        catch
+        {
+            tz = TimeZoneInfo.Local;
+        }
+    }
+
+    var localTimestamp = TimeZoneInfo.ConvertTimeFromUtc(Model.TimestampUtc, tz);
+}
+
+<section class="hero">
+    <div>
+        <p class="eyebrow">Compliance Governance</p>
+        <h1>@Model.EntityName</h1>
+        <p class="lede">@Model.Action - @localTimestamp.ToString("yyyy-MM-dd hh:mm tt") PHT</p>
+    </div>
+    <div class="hero-actions">
+        <a class="btn btn-outline-secondary" asp-action="Index"><i class="fa-solid fa-arrow-left"></i> Back</a>
+    </div>
+</section>
+
+<div class="detail-card">
+    <dl>
+        <dt>Entity Id</dt>
+        <dd>@Model.EntityId</dd>
+        <dt>Actor</dt>
+        <dd>@Model.Actor</dd>
+        <dt>Details</dt>
+        <dd>@Model.Details</dd>
+    </dl>
+</div>

@@ -1,0 +1,26 @@
+@model FurniComply.Domain.Entities.ProcurementItem
+
+@{
+    ViewData["Title"] = "Archive Order Item";
+}
+
+<section class="hero">
+    <div>
+        <p class="eyebrow">Procurement</p>
+        <h1>Archive Order Item</h1>
+        <p class="lede">This action archives the record and can be restored later.</p>
+    </div>
+</section>
+
+<div class="form-card">
+    <h3>@Model.ItemName</h3>
+    <p>Quantity: @Model.Quantity</p>
+    <form asp-action="Delete" method="post">
+        <input type="hidden" asp-for="Id" />
+        <div class="hero-actions">
+            <button class="btn btn-outline-danger" type="submit"><i class="fa-solid fa-box-archive"></i> Archive</button>
+            <a class="btn btn-outline-secondary" asp-controller="ProcurementOrders" asp-action="Details" asp-route-id="@Model.ProcurementOrderId">Cancel</a>
+        </div>
+    </form>
+</div>
+

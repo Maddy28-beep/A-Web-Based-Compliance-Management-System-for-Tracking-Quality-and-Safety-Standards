@@ -1,0 +1,95 @@
+@model IEnumerable<FurniComply.Web.Controllers.SearchController.SearchResult>
+
+@{
+    ViewData["Title"] = "Search";
+}
+
+<section class="hero">
+    <div>
+        <p class="eyebrow">Global Search</p>
+        <h1>Unified Search</h1>
+        <p class="lede">Use one search here for policies, suppliers, documents, orders, checks, CAPA, reports, and logs.</p>
+    </div>
+</section>
+
+<div class="form-card">
+    <form method="get" asp-action="Index">
+        <div class="form-grid search-filter-grid">
+            <label>Search
+                <input name="q" value="@ViewBag.Query" placeholder="Search policies, suppliers, reports, orders..." />
+            </label>
+            <label>Type
+                <select name="type">
+                    @foreach (var item in (IEnumerable<string>)ViewBag.Types)
+                    {
+                        <option value="@item" selected="@(item == (string)ViewBag.Type ? "selected" : null)">@item</option>
+                    }
+                </select>
+            </label>
+            <label>Status
+                <select name="status">
+                    @foreach (var item in (IEnumerable<string>)ViewBag.Statuses)
+                    {
+                        <option value="@item" selected="@(item == (string)ViewBag.Status ? "selected" : null)">@item</option>
+                    }
+                </select>
+            </label>
+            <label>Category
+                <select name="category">
+                    @foreach (var item in (IEnumerable<string>)ViewBag.Categories)
+                    {
+                        <option value="@item" selected="@(item == (string)ViewBag.Category ? "selected" : null)">@item</option>
+                    }
+                </select>
+            </label>
+        </div>
+        <div class="hero-actions">
+            <button class="btn btn-outline-secondary" type="submit">Run Search</button>
+            <button class="btn btn-light" type="button" id="search-reset-btn">Reset</button>
+        </div>
+    </form>
+</div>
+
+<div class="table-card">
+    <p class="table-card-subtitle" style="margin-bottom:0.5rem;">Click any row to view details.</p>
+    <table class="table data-table">
+        <thead>
+            <tr>
+                <th>Type</th>
+                <th>Title</th>
+                <th>Category</th>
+                <th>Status</th>
+                <th>Date</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var item in Model)
+        {
+            <tr data-href="@item.Url" style="cursor:pointer;">
+                <td><span class="badge bg-secondary">@item.Type</span></td>
+                <td><strong>@item.Title</strong></td>
+                <td>@item.Category</td>
+                <td>@item.Status</td>
+                <td>@(item.Date?.ToString("MMM dd, yyyy") ?? "-")</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+
+@section Scripts {
+    <script>
+        $(function () {
+            $('.data-table').DataTable({
+                order: [[4, 'desc']],
+                columnDefs: [
+                    { orderable: false, targets: 0 }
+                ]
+            });
+
+            $('#search-reset-btn').on('click', function () {
+                $('input[name="q"]').val('').focus();
+            });
+        });
+    </script>
+}

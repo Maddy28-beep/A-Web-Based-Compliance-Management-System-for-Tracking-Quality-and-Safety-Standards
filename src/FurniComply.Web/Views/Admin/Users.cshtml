@@ -1,0 +1,126 @@
+@model IEnumerable<FurniComply.Web.Models.UserSummary>
+@using System.Linq
+
+@{
+    ViewData["Title"] = "User Management";
+    var roleSummaries = (ViewBag.RoleSummaries as IEnumerable<FurniComply.Web.Models.RoleSummary> ?? Enumerable.Empty<FurniComply.Web.Models.RoleSummary>()).ToList();
+    var archivedUsers = (ViewBag.ArchivedUsers as IEnumerable<FurniComply.Web.Models.UserSummary> ?? Enumerable.Empty<FurniComply.Web.Models.UserSummary>()).ToList();
+}
+
+<section class="hero">
+    <div>
+        <p class="eyebrow">Super Admin</p>
+        <h1>User &amp; Role Management</h1>
+        <p class="lede">Assign roles and manage access across modules.</p>
+    </div>
+    <div class="hero-actions">
+        <a class="btn btn-success" asp-action="CreateUser"><i class="fa-solid fa-user-plus me-1"></i> Create User</a>
+    </div>
+</section>
+
+<div class="table-card">
+    <h3 class="table-section-title">Active Accounts</h3>
+    <table class="table data-table users-table">
+        <thead>
+            <tr>
+                <th>Email</th>
+                <th>Roles</th>
+                <th class="table-cell-center" style="width:100px;">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var user in Model)
+        {
+            <tr data-href="@Url.Action("EditRoles", new { id = user.Id })">
+                <td>@user.Email</td>
+                <td>@string.Join(", ", user.Roles)</td>
+                <td class="actions-cell table-cell-center" style="white-space:nowrap;">
+                    <a class="icon-action text-warning" asp-action="EditRoles" asp-route-id="@user.Id" title="Edit Roles"><i class="fa-solid fa-pen"></i></a>
+                    <form asp-action="DeleteUser" method="post" class="d-inline" data-confirm="delete">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@user.Id" />
+                        <button type="submit" class="icon-action text-danger" title="Archive User"><i class="fa-solid fa-box-archive"></i></button>
+                    </form>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+
+<div class="table-card">
+    <h3 class="table-section-title">Archived Accounts</h3>
+    <table class="table data-table archived-users-table">
+        <thead>
+            <tr>
+                <th>Email</th>
+                <th>Roles</th>
+                <th class="table-cell-center" style="width:100px;">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var user in archivedUsers)
+        {
+            <tr>
+                <td>@user.Email</td>
+                <td>@string.Join(", ", user.Roles)</td>
+                <td class="actions-cell table-cell-center" style="white-space:nowrap;">
+                    <form asp-action="RestoreUser" method="post" class="d-inline" data-confirm="restore">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@user.Id" />
+                        <button type="submit" class="icon-action text-success" title="Restore User"><i class="fa-solid fa-rotate-left"></i></button>
+                    </form>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+
+<div class="table-card">
+    <h3 class="table-section-title">Roles</h3>
+    <table class="table data-table roles-table">
+        <thead>
+            <tr>
+                <th>Role</th>
+                <th>Assigned Users</th>
+                <th class="table-cell-center" style="width:100px;">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var role in roleSummaries)
+        {
+            <tr>
+                <td>@role.Name</td>
+                <td>@role.UserCount</td>
+                <td class="actions-cell table-cell-center" style="white-space:nowrap;">
+                    @if (role.IsProtected)
+                    {
+                        <span class="badge bg-secondary">Protected</span>
+                    }
+                    else
+                    {
+                        <form asp-action="DeleteRole" method="post" class="d-inline" data-confirm="delete">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@role.Id" />
+                            <button type="submit" class="icon-action text-danger" title="Archive Role" @(role.UserCount > 0 ? "disabled" : null)><i class="fa-solid fa-box-archive"></i></button>
+                        </form>
+                    }
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+
+@section Scripts {
+    <script>
+        $(function () {
+            $('.users-table, .archived-users-table, .roles-table').DataTable({
+                columnDefs: [
+                    { orderable: false, searchable: false, targets: -1 }
+                ]
+            });
+        });
+    </script>
+}

@@ -1,0 +1,139 @@
+@model FurniComply.Domain.Entities.ComplianceCheck
+
+@{
+    ViewData["Title"] = "Create Compliance Check";
+    bool HasError(string key)
+    {
+        if (ViewData.ModelState.ContainsKey(key) && ViewData.ModelState[key]!.Errors.Count > 0) return true;
+        var prefixed = "check." + key;
+        if (ViewData.ModelState.ContainsKey(prefixed) && ViewData.ModelState[prefixed]!.Errors.Count > 0) return true;
+        foreach (var k in ViewData.ModelState.Keys)
+            if ((k == key || k.EndsWith("." + key)) && ViewData.ModelState[k]!.Errors.Count > 0) return true;
+        return false;
+    }
+}
+
+<header class="page-header">
+    <div>
+        <p class="eyebrow">Compliance Monitoring</p>
+        <h1>Create Compliance Check</h1>
+        <p class="lede">Record a new compliance check against a policy.</p>
+        <div class="page-meta" aria-label="Page context">
+            <span class="meta-pill"><i class="fa-solid fa-clock"></i> Dates shown in local time</span>
+            <span class="meta-pill"><i class="fa-solid fa-clipboard-check"></i> New check</span>
+        </div>
+    </div>
+    <div class="page-header-actions">
+        <a class="btn btn-outline-secondary" asp-action="Index"><i class="fa-solid fa-arrow-left"></i> Back</a>
+    </div>
+</header>
+
+<div class="form-card compliance-check-form" id="cc-create-form">
+    <form asp-action="Create" method="post">
+        <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+        <div class="form-section">
+            <h4 class="form-section-title">Context</h4>
+            <div class="form-grid form-grid-2">
+                <label class="form-field">
+                    <span class="form-label">Checked By</span>
+                    <input value="@(User.Identity?.Name ?? "system")" readonly class="form-control" title="Recorded from your signed-in account" />
+                </label>
+                <label class="form-field @(HasError("supplierReferenceId") ? "form-field-invalid" : "")">
+                    <span class="form-label">Supplier Reference</span>
+                    <select name="supplierReferenceId" asp-items="ViewBag.SupplierReferenceId" class="form-control js-select2 @(HasError("supplierReferenceId") ? "is-invalid" : "")" required>
+                        <option value="">Select supplier...</option>
+                    </select>
+                    <span class="field-validation-valid text-danger small" data-valmsg-for="supplierReferenceId"></span>
+                </label>
+            </div>
+        </div>
+        <div class="form-section">
+            <h4 class="form-section-title">Check Details</h4>
+            <div class="form-grid form-grid-2">
+                <label class="form-field @(HasError("PolicyId") ? "form-field-invalid" : "")">
+                    <span class="form-label">Policy</span>
+                    <select asp-for="PolicyId" asp-items="ViewBag.PolicyId" class="form-control js-select2 @(HasError("PolicyId") ? "is-invalid" : "")" required>
+                        <option value="">Select policy...</option>
+                    </select>
+                    <span asp-validation-for="PolicyId" class="text-danger small"></span>
+                </label>
+                <label class="form-field @(HasError("ComplianceStatusId") ? "form-field-invalid" : "")">
+                    <span class="form-label">Status</span>
+                    <select asp-for="ComplianceStatusId" asp-items="ViewBag.ComplianceStatusId" class="form-control @(HasError("ComplianceStatusId") ? "is-invalid" : "")" required>
+                        <option value="">Select status...</option>
+                    </select>
+                    <span asp-validation-for="ComplianceStatusId" class="text-danger small"></span>
+                </label>
+                <label class="form-field @(HasError("ComplianceCategoryId") ? "form-field-invalid" : "")">
+                    <span class="form-label">Category</span>
+                    <select asp-for="ComplianceCategoryId" asp-items="ViewBag.ComplianceCategoryId" class="form-control @(HasError("ComplianceCategoryId") ? "is-invalid" : "")" required>
+                        <option value="">Select category...</option>
+                    </select>
+                    <span asp-validation-for="ComplianceCategoryId" class="text-danger small"></span>
+                </label>
+                <label class="form-field @(HasError("RiskLevelId") ? "form-field-invalid" : "")">
+                    <span class="form-label">Risk Level</span>
+                    <select asp-for="RiskLevelId" asp-items="ViewBag.RiskLevelId" class="form-control @(HasError("RiskLevelId") ? "is-invalid" : "")" required>
+                        <option value="">Select risk level...</option>
+                    </select>
+                    <span asp-validation-for="RiskLevelId" class="text-danger small"></span>
+                </label>
+                <label class="form-field form-field-full @(HasError("CheckedAtUtc") ? "form-field-invalid" : "")">
+                    <span class="form-label">Checked Date</span>
+                    <input asp-for="CheckedAtUtc" type="date" class="form-control @(HasError("CheckedAtUtc") ? "is-invalid" : "")" title="Stored and displayed in local time" required />
+                    <span asp-validation-for="CheckedAtUtc" class="text-danger small"></span>
+                </label>
+            </div>
+        </div>
+        <div class="form-section">
+            <h4 class="form-section-title">Notes</h4>
+            <label class="form-field">
+                <span class="form-label">Evidence, observations, or corrective notes</span>
+                <textarea asp-for="Notes" rows="3" class="form-control form-control-notes" style="min-width:100%; min-height:4em; resize:horizontal;" placeholder="Optional notes..." data-val="false"></textarea>
+            </label>
+        </div>
+        <div class="form-actions">
+            <button class="btn btn-success" type="submit"><i class="fa-solid fa-check"></i> Save</button>
+            <a class="btn btn-outline-secondary" asp-action="Index">Cancel</a>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+<script>
+    $(function() {
+        var invalidStyle = { borderColor: '#b63d33', backgroundColor: '#fff8f8', boxShadow: '0 0 0 3px rgba(182,61,51,0.2)' };
+        function highlightInvalidFields() {
+            var $form = $('#cc-create-form');
+            function highlight($field) {
+                if (!$field.length || $field.hasClass('form-control-notes')) return;
+                $field.addClass('is-invalid input-validation-error').css(invalidStyle);
+                $field.closest('label.form-field').addClass('form-field-invalid');
+                if ($field.is('select')) {
+                    var $c = $field.next('.select2-container');
+                    if ($c.length) $c.find('.select2-selection--single').addClass('is-invalid').css(invalidStyle);
+                }
+            }
+            $form.find('.field-validation-error').each(function() {
+                var $err = $(this), fieldName = $err.attr('data-valmsg-for');
+                if (!fieldName) {
+                    var $prev = $err.prev();
+                    if ($prev.length && ($prev.is('input') || $prev.is('select') || $prev.is('textarea')))
+                        fieldName = $prev.attr('name');
+                }
+                if (fieldName) highlight($form.find('[name="' + fieldName + '"]').first());
+            });
+            $form.find('input.input-validation-error, select.input-validation-error').each(function() {
+                highlight($(this));
+            });
+        }
+        highlightInvalidFields();
+        setTimeout(highlightInvalidFields, 150);
+        setTimeout(highlightInvalidFields, 400);
+        $('#cc-create-form form').on('submit', function() {
+            var v = $(this).validate();
+            if (v && !v.form()) setTimeout(highlightInvalidFields, 50);
+        });
+    });
+</script>
+}

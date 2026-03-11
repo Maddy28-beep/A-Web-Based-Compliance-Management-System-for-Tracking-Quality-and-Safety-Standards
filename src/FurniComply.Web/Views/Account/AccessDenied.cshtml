@@ -1,0 +1,19 @@
+@{
+    ViewData["Title"] = "Access Denied";
+    var returnUrl = ViewData["ReturnUrl"] as string;
+}
+
+<section class="hero">
+    <div>
+        <p class="eyebrow">Authorization</p>
+        <h1>Access Denied</h1>
+        <p class="lede">Your role does not have permission for this action.</p>
+        @if (!string.IsNullOrWhiteSpace(returnUrl))
+        {
+            <p class="section-meta">Requested URL: @returnUrl</p>
+        }
+    </div>
+    <div class="hero-actions">
+        <a class="btn btn-outline-secondary btn-back-dashboard" asp-controller="Dashboard" asp-action="Index"><i class="fa-solid fa-arrow-left"></i> Back to Dashboard</a>
+    </div>
+</section>

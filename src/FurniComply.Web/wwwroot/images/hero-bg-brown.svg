@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+	<defs>
+		<!-- Brighter premium gold base -->
+		<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+			<stop offset="0%" stop-color="#F8EFDE"/>
+			<stop offset="50%" stop-color="#EEDAB6"/>
+			<stop offset="100%" stop-color="#DFC18E"/>
+		</linearGradient>
+
+		<!-- Strong premium gold glow -->
+		<radialGradient id="glow" cx="55%" cy="40%" r="70%">
+			<stop offset="0%" stop-color="#F1D291" stop-opacity="0.42"/>
+			<stop offset="45%" stop-color="#D5AD5B" stop-opacity="0.2"/>
+			<stop offset="100%" stop-color="#D4AF37" stop-opacity="0"/>
+		</radialGradient>
+
+		<!-- Softer grid -->
+		<pattern id="grid" width="90" height="90" patternUnits="userSpaceOnUse">
+			<path d="M90 0H0V90" fill="none" stroke="#B89866" stroke-opacity="0.08" stroke-width="1"/>
+		</pattern>
+
+		<style>
+			/* warm cognac-brown network lines */
+			.netline{
+			stroke:#8B5E3C;
+			stroke-opacity:0.38;
+			stroke-width:1.3;
+			fill:none;
+			}
+
+			/* nodes */
+			.node{
+			fill:#8B5E3C;
+			fill-opacity:0.38;
+			}
+
+			/* ✅ gold nodes POP more */
+			.nodeGold{
+			fill:#DEB25D;
+			fill-opacity:0.86;
+			}
+
+			/* shield */
+			.shield{
+			fill:none;
+			stroke:#C39A5B;
+			stroke-opacity:0.34;
+			stroke-width:2;
+			}
+
+			.shieldFill{
+			fill:#FFFFFF;
+			fill-opacity:0.28;
+			}
+		</style>
+	</defs>
+
+	<!-- Network lines -->
+	<g>
+		<path class="netline" d="M120 820 L360 640 L520 720 L760 520 L980 640 L1230 460 L1440 560 L1700 420"/>
+		<path class="netline" d="M220 340 L420 420 L650 300 L860 420 L1100 260 L1320 360 L1600 220"/>
+		<path class="netline" d="M240 640 L460 520 L620 580 L860 360 L1060 460 L1260 320 L1500 380 L1760 260"/>
+	</g>
+
+	<!-- Nodes -->
+	<g>
+		<circle class="node" cx="120" cy="820" r="6"/>
+		<circle class="nodeGold" cx="760" cy="520" r="7"/>
+		<circle class="node" cx="1440" cy="560" r="6"/>
+		<circle class="nodeGold" cx="420" cy="420" r="7"/>
+		<circle class="node" cx="1100" cy="260" r="6"/>
+		<circle class="nodeGold" cx="1260" cy="320" r="7"/>
+	</g>
+
+	<!-- Subtle shield -->
+	<g transform="translate(1500 120) scale(1.05)">
+		<path class="shieldFill" d="M0 40 L60 10 L120 40 V95 C120 140 82 165 60 175 C38 165 0 140 0 95 Z"/>
+		<path class="shield" d="M0 40 L60 10 L120 40 V95 C120 140 82 165 60 175 C38 165 0 140 0 95 Z"/>
+	</g>
+
+</svg>

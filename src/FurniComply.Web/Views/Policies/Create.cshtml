@@ -1,0 +1,58 @@
+@model FurniComply.Domain.Entities.Policy
+
+@{
+    ViewData["Title"] = "Create Policy";
+    var isAdminCreator = User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.Admin) &&
+        !User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.SuperAdmin);
+}
+
+<section class="hero">
+    <div>
+        <p class="eyebrow">Policy Management</p>
+        <h1>Create Policy</h1>
+        <p class="lede">Define a new compliance policy for your operations.</p>
+    </div>
+</section>
+
+<div class="form-card">
+    <form asp-action="Create" method="post">
+        <div class="form-grid">
+            <label>Code
+                <input value="Auto-generated on save" readonly />
+            </label>
+            <label>Title
+                <input asp-for="Title" />
+            </label>
+            <label>Category
+                <select asp-for="PolicyCategoryId" asp-items="ViewBag.PolicyCategoryId"></select>
+            </label>
+            <label>Owner
+                <input asp-for="Owner" />
+            </label>
+            <label>Version
+                <input asp-for="Version" />
+            </label>
+            <label>Status
+                @if (isAdminCreator)
+                {
+                    <input value="Active (auto-approved for Admin)" readonly />
+                }
+                else
+                {
+                    <input value="Draft (for Admin approval)" readonly />
+                }
+                <input asp-for="Status" type="hidden" />
+            </label>
+            <label>Effective Date (Local time)
+                <input asp-for="EffectiveDateUtc" type="date" />
+            </label>
+        </div>
+        <label>Content
+            <textarea asp-for="Content" rows="6"></textarea>
+        </label>
+        <div class="hero-actions">
+            <button class="btn btn-success" type="submit">Save</button>
+            <a class="btn btn-outline-secondary" asp-action="Index">Cancel</a>
+        </div>
+    </form>
+</div>

@@ -1,0 +1,26 @@
+﻿@model FurniComply.Domain.Entities.Policy
+
+@{
+    ViewData["Title"] = "Retire Policy";
+}
+
+<section class="hero">
+    <div>
+        <p class="eyebrow">Policy Management</p>
+        <h1>Retire Policy</h1>
+        <p class="lede">Soft delete. You can restore this policy within 1 year.</p>
+    </div>
+</section>
+
+<div class="form-card">
+    <h3>@Model.Title (@Model.Code)</h3>
+    <p>Status: @Model.Status</p>
+    <p>Owner: @Model.Owner</p>
+    <form asp-action="Delete" method="post" data-confirm="soft-delete">
+        <input type="hidden" asp-for="Id" />
+        <div class="hero-actions">
+            <button class="btn btn-outline-danger" type="submit">Retire</button>
+            <a class="btn btn-outline-secondary" asp-action="Index">Cancel</a>
+        </div>
+    </form>
+</div>

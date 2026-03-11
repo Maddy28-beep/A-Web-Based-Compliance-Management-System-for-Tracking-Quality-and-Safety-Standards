@@ -1,0 +1,51 @@
+﻿@model FurniComply.Domain.Entities.Policy
+
+@{
+    ViewData["Title"] = "Rollback Policy";
+}
+
+<section class="hero">
+    <div>
+        <p class="eyebrow">Policy Management</p>
+        <h1>Rollback Policy</h1>
+        <p class="lede">Choose a policy version to restore.</p>
+    </div>
+    <div class="hero-actions">
+        <a class="btn btn-outline-secondary" asp-action="Details" asp-route-id="@Model.Id"><i class="fa-solid fa-arrow-left"></i> Back</a>
+    </div>
+</section>
+
+<div class="detail-card">
+    <table class="table compact">
+        <thead>
+            <tr>
+                <th>Version</th>
+                <th>Status</th>
+                <th>Effective</th>
+                <th>Owner</th>
+                <th>Notes</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var version in Model.PolicyVersions.OrderByDescending(v => v.EffectiveDateUtc).ThenByDescending(v => v.CreatedAtUtc))
+            {
+                <tr>
+                    <td>@version.VersionNumber</td>
+                    <td>@version.Status</td>
+                    <td>@version.EffectiveDateUtc.ToString("yyyy-MM-dd")</td>
+                    <td>@version.Owner</td>
+                    <td>@version.Notes</td>
+                    <td>
+                        <form asp-action="RollbackToVersion" method="post">
+                            <input type="hidden" name="policyId" value="@Model.Id" />
+                            <input type="hidden" name="versionId" value="@version.Id" />
+                            @Html.AntiForgeryToken()
+                            <button class="btn btn-outline-secondary btn-sm" type="submit">Rollback</button>
+                        </form>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>

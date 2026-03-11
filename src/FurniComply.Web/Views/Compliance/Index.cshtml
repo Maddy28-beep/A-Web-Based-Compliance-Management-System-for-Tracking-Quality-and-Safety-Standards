@@ -1,0 +1,320 @@
+@using System.Text.RegularExpressions
+@{
+    ViewData["Title"] = "Compliance Workbench";
+    var openIssues = (IEnumerable<FurniComply.Domain.Entities.ComplianceCheck>)ViewBag.OpenIssues;
+    var recentChecks = (IEnumerable<FurniComply.Domain.Entities.ComplianceCheck>)ViewBag.RecentChecks;
+    var draftReports = (IEnumerable<FurniComply.Domain.Entities.RegulatoryReport>)ViewBag.DraftReports;
+    var nowUtc = DateTime.UtcNow;
+
+    string ExtractSegment(string? text, string marker)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return "-";
+        }
+
+        var index = text.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (index < 0)
+        {
+            return "-";
+        }
+
+        var start = index + marker.Length;
+        var end = text.IndexOf('|', start);
+        var value = (end > start ? text.Substring(start, end - start) : text.Substring(start)).Trim();
+        return string.IsNullOrWhiteSpace(value) ? "-" : value;
+    }
+
+    string StripEmail(string? text)
+    {
+        var safe = text ?? string.Empty;
+        return Regex.Replace(safe, @"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", "[hidden]");
+    }
+
+    string Truncate(string? text, int maxLength)
+    {
+        var safe = (text ?? string.Empty).Trim();
+        if (safe.Length <= maxLength)
+        {
+            return safe;
+        }
+
+        return safe.Substring(0, Math.Max(0, maxLength - 1)) + "...";
+    }
+
+    string NormalizeRisk(string? riskName)
+    {
+        var risk = (riskName ?? string.Empty).Trim().ToLowerInvariant();
+        if (risk.Contains("critical") || risk.Contains("high")) return "High";
+        if (risk.Contains("medium")) return "Medium";
+        if (risk.Contains("low")) return "Low";
+        return "Unknown";
+    }
+
+    string StatusBadgeClass(string? statusName)
+    {
+        var status = (statusName ?? string.Empty).Trim().ToLowerInvariant();
+        if (status == "compliant") return "bg-success";
+        if (status == "non-compliant") return "bg-danger";
+        if (status == "pending") return "bg-warning text-dark";
+        if (status == "draft") return "bg-warning text-dark";
+        if (status == "submitted") return "bg-info text-dark";
+        if (status == "accepted") return "bg-success";
+        if (status == "rejected") return "bg-danger";
+        return "bg-secondary";
+    }
+
+    var openIssueRows = openIssues
+        .OrderByDescending(x => x.CheckedAtUtc)
+        .Select(x => new
+        {
+            x.Id,
+            Date = x.CheckedAtUtc,
+            Policy = x.Policy?.Title ?? "-",
+            Supplier = ExtractSegment(x.Notes, "Supplier:"),
+            Site = ExtractSegment(x.Notes, "Site:"),
+            Risk = NormalizeRisk(x.RiskLevel?.Name),
+            Status = x.ComplianceStatus?.Name ?? "Unknown",
+            Summary = Truncate(StripEmail(x.Notes), 78)
+        })
+        .ToList();
+
+    var recentCheckRows = recentChecks
+        .OrderByDescending(x => x.CheckedAtUtc)
+        .Select(x => new
+        {
+            x.Id,
+            Date = x.CheckedAtUtc,
+            Policy = x.Policy?.Title ?? "-",
+            Supplier = ExtractSegment(x.Notes, "Supplier:"),
+            Site = ExtractSegment(x.Notes, "Site:"),
+            Risk = NormalizeRisk(x.RiskLevel?.Name),
+            Status = x.ComplianceStatus?.Name ?? "Unknown",
+            Summary = Truncate(StripEmail(x.Notes), 78)
+        })
+        .ToList();
+
+    var draftReportRows = draftReports
+        .OrderByDescending(x => x.PeriodEndUtc)
+        .Select(x => new
+        {
+            x.Id,
+            Date = x.PeriodEndUtc,
+            Type = x.ReportType,
+            Status = x.ReportStatus?.Name ?? "Draft",
+            Supplier = x.Supplier?.Name ?? "All suppliers",
+            Summary = Truncate(x.Summary, 78)
+        })
+        .ToList();
+
+    var allSites = openIssueRows
+        .Select(x => x.Site)
+        .Concat(recentCheckRows.Select(x => x.Site))
+        .Where(x => !string.IsNullOrWhiteSpace(x) && x != "-")
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .OrderBy(x => x)
+        .ToList();
+
+}
+
+<section class="hero module-header">
+    <div>
+        <p class="eyebrow">Compliance Module</p>
+        <h1>Compliance Workbench</h1>
+        <p class="lede">Overview at the top, compact activity preview below.</p>
+    </div>
+    <div class="hero-actions module-header-actions compliance-quick-actions">
+        <a class="btn btn-outline-secondary btn-lg px-4" asp-controller="ComplianceChecks" asp-action="Index">Checks</a>
+        <a class="btn btn-success btn-lg px-4" asp-controller="RegulatoryReports" asp-action="Index">Reports</a>
+    </div>
+</section>
+
+<section class="table-card">
+    <div class="table-card-header">
+        <div>
+            <h3 class="table-card-title">Recent Activity</h3>
+            <p class="table-card-subtitle">Filter activity by search, status, and risk level.</p>
+        </div>
+    </div>
+
+    <div class="workbench-controls">
+        <div class="workbench-filters supplier-style-filters">
+            <label>Search
+                <input type="text" id="workbenchSearch" placeholder="Supplier name..." />
+            </label>
+            <label>Status
+                <select id="workbenchTypeFilter" class="js-select2">
+                    <option value="noncompliance">Non-Compliance</option>
+                    <option value="checks">Checks</option>
+                    <option value="reports">Reports</option>
+                </select>
+            </label>
+            <label>Risk
+                <select id="workbenchRiskFilter" class="js-select2">
+                    <option value="all">All Risks</option>
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                </select>
+            </label>
+            <label>Site
+                <select id="workbenchSiteFilter" class="js-select2">
+                    <option value="all">All Sites</option>
+                    @foreach (var site in allSites)
+                    {
+                        <option value="@site.ToLowerInvariant()">@site</option>
+                    }
+                </select>
+            </label>
+        </div>
+    </div>
+
+    <div class="workbench-panel is-active" data-panel="noncompliance">
+        <table class="table compact-table" id="nonCompliancePreview">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Supplier</th>
+                    <th>Risk</th>
+                    <th>Status</th>
+                    <th>Summary</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in openIssueRows.Take(5))
+                {
+                    var ageDays = (nowUtc - row.Date).TotalDays;
+                    <tr data-risk="@row.Risk" data-site="@row.Site" data-age="@ageDays.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)">
+                        <td>@row.Date.ToString("MMM dd, yyyy")</td>
+                        <td>@row.Supplier</td>
+                        <td>@row.Risk</td>
+                        <td><span class="badge @StatusBadgeClass(row.Status)">@row.Status</span></td>
+                        <td title="@StripEmail(row.Summary)">@row.Summary</td>
+                    </tr>
+                }
+                <tr class="workbench-empty-row" style="display:none;">
+                    <td colspan="5">No activity found for the selected filters.</td>
+                </tr>
+            </tbody>
+        </table>
+        <div class="workbench-viewall">
+            <a asp-controller="ComplianceChecks" asp-action="Index">View All</a>
+        </div>
+    </div>
+
+    <div class="workbench-panel" data-panel="checks">
+        <table class="table compact-table" id="checksPreview">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Supplier</th>
+                    <th>Risk</th>
+                    <th>Status</th>
+                    <th>Summary</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in recentCheckRows.Take(5))
+                {
+                    var ageDays = (nowUtc - row.Date).TotalDays;
+                    <tr data-risk="@row.Risk" data-site="@row.Site" data-age="@ageDays.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)">
+                        <td>@row.Date.ToString("MMM dd, yyyy")</td>
+                        <td>@row.Supplier</td>
+                        <td>@row.Risk</td>
+                        <td><span class="badge @StatusBadgeClass(row.Status)">@row.Status</span></td>
+                        <td title="@StripEmail(row.Summary)">@row.Summary</td>
+                    </tr>
+                }
+                <tr class="workbench-empty-row" style="display:none;">
+                    <td colspan="5">No activity found for the selected filters.</td>
+                </tr>
+            </tbody>
+        </table>
+        <div class="workbench-viewall">
+            <a asp-controller="ComplianceChecks" asp-action="Index">View All</a>
+        </div>
+    </div>
+
+    <div class="workbench-panel" data-panel="reports">
+        <table class="table compact-table" id="reportsPreview">
+            <thead>
+                <tr>
+                    <th>Period End</th>
+                    <th>Supplier</th>
+                    <th>Report</th>
+                    <th>Status</th>
+                    <th>Summary</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in draftReportRows.Take(5))
+                {
+                    var ageDays = (nowUtc - row.Date).TotalDays;
+                    <tr data-risk="" data-site="" data-age="@ageDays.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)">
+                        <td>@row.Date.ToString("MMM dd, yyyy")</td>
+                        <td>@row.Supplier</td>
+                        <td>@row.Type</td>
+                        <td><span class="badge @StatusBadgeClass(row.Status)">@row.Status</span></td>
+                        <td title="@row.Summary">@row.Summary</td>
+                    </tr>
+                }
+                <tr class="workbench-empty-row" style="display:none;">
+                    <td colspan="5">No activity found for the selected filters.</td>
+                </tr>
+            </tbody>
+        </table>
+        <div class="workbench-viewall">
+            <a asp-controller="RegulatoryReports" asp-action="Index">View All</a>
+        </div>
+    </div>
+</section>
+
+@section Scripts {
+    <script>
+        (function () {
+            const panels = Array.from(document.querySelectorAll('.workbench-panel'));
+            const typeFilter = document.getElementById('workbenchTypeFilter');
+            const searchFilter = document.getElementById('workbenchSearch');
+            const riskFilter = document.getElementById('workbenchRiskFilter');
+
+            function setActive(panelName) {
+                panels.forEach(panel => panel.classList.toggle('is-active', panel.dataset.panel === panelName));
+                applyFilters();
+            }
+
+            function applyFilters() {
+                const activePanel = panels.find(panel => panel.classList.contains('is-active'));
+                if (!activePanel) return;
+
+                const searchText = (searchFilter && searchFilter.value ? searchFilter.value : '').trim().toLowerCase();
+                const selectedRisk = riskFilter ? riskFilter.value : '';
+                const rows = Array.from(activePanel.querySelectorAll('tbody tr'));
+                const dataRows = rows.filter(row => !row.classList.contains('workbench-empty-row'));
+                const emptyRow = activePanel.querySelector('.workbench-empty-row');
+                let visibleCount = 0;
+
+                dataRows.forEach(row => {
+                    const content = (row.textContent || '').toLowerCase();
+                    const rowRisk = row.getAttribute('data-risk') || '';
+                    const passSearch = !searchText || content.includes(searchText);
+                    const passRisk = !selectedRisk || rowRisk === selectedRisk;
+                    const show = passSearch && passRisk;
+                    row.style.display = show ? '' : 'none';
+                    if (show) {
+                        visibleCount++;
+                    }
+                });
+
+                if (emptyRow) {
+                    emptyRow.style.display = visibleCount === 0 ? '' : 'none';
+                }
+            }
+
+            typeFilter?.addEventListener('change', () => setActive(typeFilter.value || 'noncompliance'));
+            searchFilter?.addEventListener('input', applyFilters);
+            riskFilter?.addEventListener('change', applyFilters);
+            setActive(typeFilter?.value || 'noncompliance');
+            applyFilters();
+        })();
+    </script>
+}

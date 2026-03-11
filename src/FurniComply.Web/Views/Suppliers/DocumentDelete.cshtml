@@ -1,0 +1,33 @@
+@model FurniComply.Domain.Entities.SupplierComplianceDocument
+
+@{
+    ViewData["Title"] = "Delete Supplier Document";
+}
+
+<section class="hero">
+    <div>
+        <p class="eyebrow">Procurement</p>
+        <h1>Delete Supplier Document</h1>
+        <p class="lede">This will remove the document metadata record.</p>
+    </div>
+</section>
+
+<div class="detail-card">
+    <dl>
+        <dt>Document Type</dt>
+        <dd>@Model.DocumentType</dd>
+        <dt>Status</dt>
+        <dd>@Model.DocumentStatus</dd>
+        <dt>Expiry</dt>
+        <dd>@(Model.ExpiryDateUtc.HasValue ? Model.ExpiryDateUtc.Value.ToString("yyyy-MM-dd") : "-")</dd>
+        <dt>File URL</dt>
+        <dd>@(string.IsNullOrWhiteSpace(Model.FileUrl) ? "-" : Model.FileUrl)</dd>
+    </dl>
+    <form asp-action="DocumentDelete" method="post">
+        <input type="hidden" asp-for="Id" />
+        <div class="hero-actions">
+            <button class="btn btn-danger" type="submit">Delete</button>
+            <a class="btn btn-outline-secondary" asp-action="Details" asp-route-id="@Model.SupplierId">Cancel</a>
+        </div>
+    </form>
+</div>

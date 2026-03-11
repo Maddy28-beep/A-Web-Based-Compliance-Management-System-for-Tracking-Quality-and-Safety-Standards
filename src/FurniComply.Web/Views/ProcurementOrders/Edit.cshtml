@@ -1,0 +1,59 @@
+@model FurniComply.Domain.Entities.ProcurementOrder
+
+@{
+    ViewData["Title"] = "Edit Order";
+}
+
+<header class="page-header">
+    <div>
+        <p class="eyebrow">Procurement</p>
+        <h1>Edit Purchase Order</h1>
+        <p class="lede">Adjust supplier, totals, and order status.</p>
+        <div class="page-meta" aria-label="Page context">
+            <span class="meta-pill"><i class="fa-solid fa-clock"></i> Dates shown in local time</span>
+        </div>
+    </div>
+    <div class="page-header-actions">
+        <a class="btn btn-outline-secondary" asp-action="Details" asp-route-id="@Model.Id"><i class="fa-solid fa-arrow-left"></i> Back</a>
+    </div>
+</header>
+
+<div class="form-card">
+    <form asp-action="Edit" method="post">
+        <input type="hidden" asp-for="Id" />
+        <input type="hidden" asp-for="ExchangeRateUsed" />
+        <input type="hidden" asp-for="ExchangeRateTimestampUtc" />
+        <div class="form-grid">
+            <label>Order Number
+                <input asp-for="OrderNumber" readonly />
+            </label>
+            <label>Supplier
+                <select asp-for="SupplierId" asp-items="ViewBag.SupplierId"></select>
+            </label>
+            <label>Status
+                <select asp-for="ProcurementStatusId" asp-items="ViewBag.ProcurementStatusId"></select>
+            </label>
+            <label>Order Date (Local time)
+                <input asp-for="OrderDateUtc" type="date" />
+            </label>
+            <label>Total Amount (USD)
+                <input asp-for="TotalAmount" type="number" step="0.01" readonly />
+                @if (Model.ExchangeRateUsed.HasValue)
+                {
+                    <div class="widget-meta po-php-hint">
+                        Approx. ₱@((Model.TotalAmount * Model.ExchangeRateUsed.Value).ToString("N2")) PHP
+                    </div>
+                    <div class="small text-muted">
+                        Rate: 1 USD = @Model.ExchangeRateUsed.Value.ToString("N4") PHP (Captured)
+                    </div>
+                }
+                <div class="widget-meta">Auto-computed from order items.</div>
+            </label>
+        </div>
+        <div class="form-actions">
+            <button class="btn btn-success" type="submit">Save</button>
+            <a class="btn btn-outline-secondary" asp-action="Details" asp-route-id="@Model.Id">Cancel</a>
+        </div>
+    </form>
+</div>
+

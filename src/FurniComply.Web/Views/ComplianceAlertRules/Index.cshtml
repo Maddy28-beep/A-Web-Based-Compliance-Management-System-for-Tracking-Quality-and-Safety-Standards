@@ -1,0 +1,20 @@
+@model IEnumerable<FurniComply.Domain.Entities.ComplianceAlertRule>
+
+@{
+    ViewData["Title"] = "Alert Rules (Paused)";
+}
+
+<section class="hero">
+    <div>
+        <p class="eyebrow">Administration</p>
+        <h1>Alert Rules (Temporarily Disabled)</h1>
+        <p class="lede">This module is hidden for now to keep the workflow focused for your defense demo.</p>
+    </div>
+</section>
+
+<div class="form-card">
+    <p class="section-meta">You can re-enable this later when you are ready to configure automated alerts.</p>
+    <div class="hero-actions module-header-actions">
+        <a class="btn btn-outline-secondary btn-back-dashboard" asp-controller="Dashboard" asp-action="Index"><i class="fa-solid fa-arrow-left"></i> Back to Dashboard</a>
+    </div>
+</div>

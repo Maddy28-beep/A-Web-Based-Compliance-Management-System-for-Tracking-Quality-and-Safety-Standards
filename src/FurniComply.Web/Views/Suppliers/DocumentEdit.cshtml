@@ -1,0 +1,53 @@
+@model FurniComply.Domain.Entities.SupplierComplianceDocument
+
+@{
+    ViewData["Title"] = "Edit Supplier Document";
+}
+
+<section class="hero">
+    <div>
+        <p class="eyebrow">Procurement</p>
+        <h1>Edit Supplier Document</h1>
+        <p class="lede">Update compliance document metadata.</p>
+    </div>
+</section>
+
+<div class="form-card">
+    <form asp-action="DocumentEdit" method="post" enctype="multipart/form-data">
+        <input type="hidden" asp-for="Id" />
+        <input type="hidden" asp-for="SupplierId" />
+        <div asp-validation-summary="All" class="text-danger"></div>
+        <div class="form-grid">
+            <label>Document Type
+                <select asp-for="DocumentType" asp-items="ViewBag.DocumentTypeOptions"></select>
+            </label>
+            <label>Status
+                <input value="Auto (recomputed from file + expiry)" readonly />
+            </label>
+            <label>Expiry Date (Local time)
+                <input asp-for="ExpiryDateUtc" type="date" />
+            </label>
+            <label>Upload Replacement File
+                <input type="file" name="uploads" />
+            </label>
+        </div>
+        <label>Notes
+            <textarea asp-for="Notes" rows="4"></textarea>
+        </label>
+        <p class="widget-meta">
+            @if (!string.IsNullOrWhiteSpace(Model.FileUrl) && Model.FileUrl.StartsWith("/uploads/"))
+            {
+                <text>Current file: @System.IO.Path.GetFileName(Model.FileUrl)</text>
+            }
+            else
+            {
+                <text>No file uploaded yet.</text>
+            }
+        </p>
+        <div class="form-actions">
+            <a class="btn btn-outline-secondary" asp-action="Details" asp-route-id="@Model.SupplierId"><i class="fa-solid fa-xmark"></i> Cancel</a>
+            <a class="btn btn-outline-danger" asp-action="DocumentDelete" asp-route-id="@Model.Id"><i class="fa-solid fa-box-archive"></i> Archive</a>
+            <button class="btn btn-success" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save</button>
+        </div>
+    </form>
+</div>

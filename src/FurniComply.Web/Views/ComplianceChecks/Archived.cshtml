@@ -1,0 +1,98 @@
+@model IEnumerable<FurniComply.Domain.Entities.ComplianceCheck>
+
+@{
+    ViewData["Title"] = "Archived Compliance Checks";
+    var canManageChecks =
+        !User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.SuperAdmin) &&
+        (User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.ComplianceManager) ||
+         User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.DepartmentHead));
+}
+
+<header class="page-header">
+    <div>
+        <p class="eyebrow">Compliance Monitoring</p>
+        <h1>Archived Compliance Checks</h1>
+        <p class="lede">Soft-deleted compliance checks retained for audit and potential restoration.</p>
+        <div class="page-meta" aria-label="Page context">
+            <span class="meta-pill"><i class="fa-solid fa-clock"></i> Dates shown in local time</span>
+            <span class="meta-pill"><i class="fa-solid fa-box-archive"></i> @Model.Count() archived</span>
+        </div>
+    </div>
+    <div class="page-header-actions">
+        <a class="btn btn-outline-secondary" asp-action="Index"><i class="fa-solid fa-arrow-left"></i> Back to Active</a>
+    </div>
+</header>
+
+@if (!Model.Any())
+{
+    <section class="empty-state" aria-label="No archived compliance checks">
+        <div class="empty-state-icon"><i class="fa-solid fa-box-archive"></i></div>
+        <div>
+            <h3>No archived checks</h3>
+            <p>Archived checks will appear here for audit history and restoration.</p>
+            <div class="empty-state-actions">
+                <a class="btn btn-outline-secondary" asp-action="Index"><i class="fa-solid fa-arrow-left"></i> Back to Active</a>
+            </div>
+        </div>
+    </section>
+}
+else
+{
+    <div class="table-card">
+        <div class="table-card-header">
+            <div>
+                <h3 class="table-card-title">Archived Checks</h3>
+                <p class="table-card-subtitle">Click a row to open details. Restore is available for authorized roles.</p>
+            </div>
+        </div>
+        <table class="table data-table">
+        <thead>
+            <tr>
+                <th>Policy</th>
+                <th>Status</th>
+                <th>Checked</th>
+                <th>Archived On</th>
+                <th>Notes</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var item in Model)
+        {
+            <tr data-href="@Url.Action("Details", new { id = item.Id })">
+                <td>@item.Policy?.Title</td>
+                <td>@(item.ComplianceStatus?.Name ?? "-")</td>
+                <td>@item.CheckedAtUtc.ToString("yyyy-MM-dd")</td>
+                <td>@(item.DeletedAtUtc?.ToString("yyyy-MM-dd") ?? "-")</td>
+                <td class="table-cell-notes">@item.Notes</td>
+                <td class="actions-cell">
+                    @if (canManageChecks)
+                    {
+                        <form asp-action="Restore" method="post" class="d-inline" data-confirm="restore">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@item.Id" />
+                            <button type="submit" class="btn btn-sm btn-outline-primary">Restore</button>
+                        </form>
+                    }
+                    else
+                    {
+                        <span class="text-muted">-</span>
+                    }
+                </td>
+            </tr>
+        }
+        </tbody>
+        </table>
+    </div>
+}
+
+@section Scripts {
+    <script>
+        $(function () {
+            $('.data-table').DataTable({
+                order: [[3, 'desc']]
+            });
+        });
+    </script>
+}
+

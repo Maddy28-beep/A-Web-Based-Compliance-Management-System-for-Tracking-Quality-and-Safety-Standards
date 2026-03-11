@@ -1,0 +1,109 @@
+@{
+    var success = TempData["SuccessMessage"] as string;
+    var error = TempData["ErrorMessage"] as string;
+    var warning = TempData["WarningMessage"] as string;
+    var info = TempData["InfoMessage"] as string;
+    var hasAny = !string.IsNullOrWhiteSpace(success) ||
+                 !string.IsNullOrWhiteSpace(error) ||
+                 !string.IsNullOrWhiteSpace(warning) ||
+                 !string.IsNullOrWhiteSpace(info);
+}
+
+@if (hasAny)
+{
+    <div class="erp-toast-container" id="erpToastContainer" aria-live="polite" aria-atomic="true">
+        @if (!string.IsNullOrWhiteSpace(success))
+        {
+            <div class="erp-toast erp-toast-success" data-toast-duration="3000">
+                <div class="erp-toast-icon"><i class="fa-solid fa-circle-check"></i></div>
+                <div class="erp-toast-body">
+                    <div class="erp-toast-title">Success</div>
+                    <div class="erp-toast-msg">@success</div>
+                </div>
+                <button type="button" class="erp-toast-close" aria-label="Dismiss"><i class="fa-solid fa-xmark"></i></button>
+                <div class="erp-toast-progress"><div class="erp-toast-progress-bar" style="--toast-duration:3s;"></div></div>
+            </div>
+        }
+        @if (!string.IsNullOrWhiteSpace(error))
+        {
+            <div class="erp-toast erp-toast-error" data-toast-duration="5000">
+                <div class="erp-toast-icon"><i class="fa-solid fa-circle-xmark"></i></div>
+                <div class="erp-toast-body">
+                    <div class="erp-toast-title">Error</div>
+                    <div class="erp-toast-msg">@error</div>
+                </div>
+                <button type="button" class="erp-toast-close" aria-label="Dismiss"><i class="fa-solid fa-xmark"></i></button>
+                <div class="erp-toast-progress"><div class="erp-toast-progress-bar" style="--toast-duration:5s;"></div></div>
+            </div>
+        }
+        @if (!string.IsNullOrWhiteSpace(warning))
+        {
+            <div class="erp-toast erp-toast-warning" data-toast-duration="4000">
+                <div class="erp-toast-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                <div class="erp-toast-body">
+                    <div class="erp-toast-title">Warning</div>
+                    <div class="erp-toast-msg">@warning</div>
+                </div>
+                <button type="button" class="erp-toast-close" aria-label="Dismiss"><i class="fa-solid fa-xmark"></i></button>
+                <div class="erp-toast-progress"><div class="erp-toast-progress-bar" style="--toast-duration:4s;"></div></div>
+            </div>
+        }
+        @if (!string.IsNullOrWhiteSpace(info))
+        {
+            <div class="erp-toast erp-toast-info" data-toast-duration="4000">
+                <div class="erp-toast-icon"><i class="fa-solid fa-circle-info"></i></div>
+                <div class="erp-toast-body">
+                    <div class="erp-toast-title">Info</div>
+                    <div class="erp-toast-msg">@info</div>
+                </div>
+                <button type="button" class="erp-toast-close" aria-label="Dismiss"><i class="fa-solid fa-xmark"></i></button>
+                <div class="erp-toast-progress"><div class="erp-toast-progress-bar" style="--toast-duration:4s;"></div></div>
+            </div>
+        }
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            setTimeout(function () {
+                var toasts = document.querySelectorAll('.erp-toast-container .erp-toast');
+                toasts.forEach(function (toast, index) {
+                    toast.style.animationDelay = (index * 0.12) + 's';
+                    toast.style.animationFillMode = 'forwards';
+
+                    var duration = parseInt(toast.getAttribute('data-toast-duration')) || 3000;
+                    var timer = setTimeout(function () { dismissToast(toast); }, duration + (index * 120));
+
+                    var closeBtn = toast.querySelector('.erp-toast-close');
+                    if (closeBtn) {
+                        closeBtn.addEventListener('click', function () {
+                            clearTimeout(timer);
+                            dismissToast(toast);
+                        });
+                    }
+
+                    toast.addEventListener('mouseenter', function () {
+                        clearTimeout(timer);
+                        var bar = toast.querySelector('.erp-toast-progress-bar');
+                        if (bar) bar.style.animationPlayState = 'paused';
+                    });
+
+                    toast.addEventListener('mouseleave', function () {
+                        var bar = toast.querySelector('.erp-toast-progress-bar');
+                        if (bar) bar.style.animationPlayState = 'running';
+                        timer = setTimeout(function () { dismissToast(toast); }, 1500);
+                    });
+                });
+            }, 150);
+
+            function dismissToast(el) {
+                if (el.classList.contains('erp-toast-exit')) return;
+                el.classList.add('erp-toast-exit');
+                el.addEventListener('animationend', function () {
+                    el.remove();
+                    var container = document.getElementById('erpToastContainer');
+                    if (container && container.children.length === 0) container.remove();
+                }, { once: true });
+            }
+        });
+    </script>
+}

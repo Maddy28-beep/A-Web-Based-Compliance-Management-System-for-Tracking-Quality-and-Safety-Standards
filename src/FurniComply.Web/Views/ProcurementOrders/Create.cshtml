@@ -1,0 +1,193 @@
+@model FurniComply.Domain.Entities.ProcurementOrder
+
+@{
+    ViewData["Title"] = "Create Order";
+    var itemNameOptions = (ViewBag.ItemNameOptions as IEnumerable<string> ?? Enumerable.Empty<string>()).ToList();
+    var qualityStandardOptions = (ViewBag.QualityStandardOptions as IEnumerable<string> ?? Enumerable.Empty<string>()).ToList();
+    var itemCatalogJson = ViewBag.ItemCatalogJson as string ?? "[]";
+}
+
+<header class="page-header">
+    <div>
+        <p class="eyebrow">Procurement</p>
+        <h1>Create Purchase Order</h1>
+        <p class="lede">Open a new order and link it to a supplier.</p>
+        <div class="page-meta" aria-label="Page context">
+            <span class="meta-pill"><i class="fa-solid fa-clock"></i> Dates shown in local time</span>
+            <span class="meta-pill"><i class="fa-solid fa-file-circle-plus"></i> Draft</span>
+        </div>
+    </div>
+    <div class="page-header-actions">
+        <a class="btn btn-outline-secondary" asp-action="Index"><i class="fa-solid fa-arrow-left"></i> Back</a>
+    </div>
+</header>
+
+<div class="form-card">
+    <form asp-action="Create" method="post">
+        <div asp-validation-summary="ModelOnly" class="text-danger mb-2"></div>
+        <input type="hidden" id="ExchangeRateUsed" name="ExchangeRateUsed" />
+        <input type="hidden" id="ExchangeRateTimestampUtc" name="ExchangeRateTimestampUtc" />
+        <div class="form-grid po-create-header-grid">
+            <div class="form-group">
+                <label class="form-label">Order Number</label>
+                <input asp-for="OrderNumber" readonly class="form-control" />
+                <span asp-validation-for="OrderNumber" class="text-danger small"></span>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Supplier</label>
+                <select asp-for="SupplierId" asp-items="ViewBag.SupplierId" class="form-select js-select2"></select>
+                <span asp-validation-for="SupplierId" class="text-danger small"></span>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Order Date (Local time)</label>
+                <input asp-for="OrderDateUtc" type="date" class="form-control" />
+                <span asp-validation-for="OrderDateUtc" class="text-danger small"></span>
+            </div>
+        </div>
+
+        <hr />
+        <section class="po-first-item-block">
+            <div class="detail-section-header mt-4 po-create-item-header">
+                <div>
+                    <h3>First Order Item (Optional)</h3>
+                    <p class="widget-meta">Fill this to create the order and first line item in one step.</p>
+                </div>
+                <div class="po-create-total-wrap">
+                    <label class="po-total-label">Total Amount (USD)
+                        <input asp-for="TotalAmount" type="number" step="0.01" readonly class="po-total-amount" />
+                    </label>
+                    <div id="totalPhpWrap" class="widget-meta mt-1 po-total-php is-hidden-initial">
+                        Approx. <span id="totalPhp">--</span> PHP
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-grid first-order-inline-grid mt-3">
+                <div class="form-group">
+                    <label class="form-label">Item Name</label>
+                    <select id="firstItemName" name="firstItemName" class="form-select js-select2">
+                        <option value="">Select item...</option>
+                        @foreach (var option in itemNameOptions)
+                        {
+                            <option value="@option">@option</option>
+                        }
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Quantity</label>
+                    <input id="firstItemQuantity" name="firstItemQuantity" type="number" min="1" value="1" class="form-control" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Unit Cost (USD)</label>
+                    <input id="firstItemUnitCost" name="firstItemUnitCost" type="number" min="0" step="0.01" value="0.00" class="form-control po-unit-cost-input" />
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Quality Standard</label>
+                    <select id="firstItemQualityStandard" name="firstItemQualityStandard" class="form-select js-select2">
+                        <option value="">Select quality standard...</option>
+                        @foreach (var option in qualityStandardOptions)
+                        {
+                            <option value="@option">@option</option>
+                        }
+                    </select>
+                </div>
+            </div>
+            <div class="form-group po-first-item-notes">
+                <label class="form-label">Item Notes</label>
+                <textarea id="firstItemNotes" name="firstItemNotes" rows="8" class="form-control form-control-notes"></textarea>
+            </div>
+        </section>
+
+        <div class="form-actions">
+            <a class="btn btn-outline-secondary" asp-action="Index"><i class="fa-solid fa-xmark"></i> Cancel</a>
+            <button class="btn btn-success" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save Draft</button>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        (function () {
+            const catalog = @Html.Raw(itemCatalogJson);
+            const itemSelect = document.getElementById("firstItemName");
+            const unitCost = document.getElementById("firstItemUnitCost");
+            const qualitySelect = document.getElementById("firstItemQualityStandard");
+            const totalAmount = document.getElementById("TotalAmount");
+            const totalPhp = document.getElementById("totalPhp");
+            const totalPhpWrap = document.getElementById("totalPhpWrap");
+            const rateInput = document.getElementById("ExchangeRateUsed");
+            const timeInput = document.getElementById("ExchangeRateTimestampUtc");
+            let exchangeRate = 0;
+
+            async function fetchRate() {
+                try {
+                    const response = await fetch('/Dashboard/Widgets?baseCurrency=USD');
+                    if (response.ok) {
+                        const data = await response.json();
+                        const rateObj = data.exchangeRates.rates.find(r => r.currency === "PHP");
+                        if (rateObj) {
+                            exchangeRate = rateObj.rate;
+                            if (rateInput) rateInput.value = exchangeRate;
+                            if (timeInput) timeInput.value = new Date().toISOString();
+                            updatePreviewTotal();
+                        }
+                    }
+                } catch (e) { console.error("Rate fetch failed", e); }
+            }
+            fetchRate();
+
+            function updateFromItem() {
+                const selected = catalog.find(x => x.Name === itemSelect.value);
+                if (!selected) {
+                    return;
+                }
+
+                if (unitCost && !unitCost.value) {
+                    unitCost.value = Number(selected.UnitCost || 0).toFixed(2);
+                }
+
+                if (qualitySelect && selected.QualityStandard) {
+                    const existing = Array.from(qualitySelect.options).find(o => o.value === selected.QualityStandard);
+                    if (!existing) {
+                        const option = document.createElement("option");
+                        option.value = selected.QualityStandard;
+                        option.textContent = selected.QualityStandard;
+                        qualitySelect.appendChild(option);
+                    }
+
+                    if (!qualitySelect.value) {
+                        qualitySelect.value = selected.QualityStandard;
+                    }
+                }
+            }
+
+            function updatePreviewTotal() {
+                const qty = Number(document.getElementById("firstItemQuantity")?.value || 0);
+                const cost = Number(unitCost?.value || 0);
+                const rawTotal = qty * cost;
+                // Round to 2 decimals to match what the database will store
+                const total = Math.round(rawTotal * 100) / 100;
+                
+                if (qty > 0 && cost >= 0 && totalAmount) {
+                    totalAmount.value = total.toFixed(2);
+                    if (exchangeRate > 0 && totalPhp && totalPhpWrap) {
+                        const phpValue = total * exchangeRate;
+                        totalPhp.textContent = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(phpValue);
+                        totalPhpWrap.style.display = "block";
+                    }
+                } else if (totalAmount) {
+                    totalAmount.value = "0.00";
+                    if (totalPhpWrap) totalPhpWrap.style.display = "none";
+                }
+            }
+
+            itemSelect?.addEventListener("change", function () {
+                updateFromItem();
+                updatePreviewTotal();
+            });
+            document.getElementById("firstItemQuantity")?.addEventListener("input", updatePreviewTotal);
+            unitCost?.addEventListener("input", updatePreviewTotal);
+        })();
+    </script>
+}

@@ -1,0 +1,400 @@
+@using FurniComply.Domain.Enums
+@using FurniComply.Infrastructure.Persistence
+@inject AppDbContext Db
+@{
+    var isAuthenticated = User.Identity?.IsAuthenticated ?? false;
+    var isSuperAdmin = isAuthenticated && User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.SuperAdmin);
+    var isAdmin = isAuthenticated && !isSuperAdmin && User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.Admin);
+    var isComplianceManager = isAuthenticated && !isSuperAdmin && User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.ComplianceManager);
+    var isDepartmentHead = isAuthenticated && !isSuperAdmin && User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.DepartmentHead);
+    var isProcurement = isAuthenticated && !isSuperAdmin && User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.Procurement);
+    var isAuditor = isAuthenticated && User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.Auditor);
+
+    var canViewPolicies = isSuperAdmin || isAdmin || isComplianceManager || isDepartmentHead || isAuditor;
+    var canViewCompliance = isAdmin || isComplianceManager || isDepartmentHead || isAuditor;
+    var canViewChecks = isAdmin || isComplianceManager || isDepartmentHead || isAuditor;
+    var canViewCapa = canViewChecks;
+
+    var canViewProcurement = isAdmin || isProcurement;
+    var canViewOrders = isAdmin || isProcurement;
+    var canViewSuppliers = isAdmin || isComplianceManager || isProcurement;
+    var canViewSupplierDocuments = isAdmin || isComplianceManager || isProcurement;
+
+    var canViewReportsCenter = isSuperAdmin || isAdmin || isComplianceManager;
+    var canViewRegulatoryReports = isSuperAdmin || isAdmin || isComplianceManager;
+    var canViewAuditLogs = isSuperAdmin || isAdmin || isComplianceManager;
+
+    var canViewMasterData = isSuperAdmin || isAdmin;
+    var canViewSettings = isSuperAdmin;
+    var canViewAlertRules = false;
+
+    var showGovernanceSection = canViewPolicies || canViewCompliance || canViewChecks;
+    var showSupplyChainSection = canViewProcurement || canViewSuppliers || canViewSupplierDocuments || canViewOrders;
+    var showReportingSection = canViewReportsCenter || canViewRegulatoryReports || canViewAuditLogs;
+    var showAdministrationSection = canViewMasterData || canViewSettings || canViewAlertRules;
+    var canApprovePolicies = isAdmin;
+    var canApproveSuppliers = isAdmin;
+    var canApproveReports = isAdmin;
+    var canApproveOrders = isAdmin;
+    var pendingSupplierApprovals = 0;
+    var pendingPolicyApprovals = 0;
+    var pendingReportApprovals = 0;
+    var pendingOrderApprovals = 0;
+    var complianceQueueCount = 0;
+    var openCapaCount = 0;
+    var highRiskAlertCount = 0;
+
+    if (canApproveSuppliers)
+    {
+        pendingSupplierApprovals = Db.Suppliers.Count(s => s.ApprovalStatus == SupplierApprovalStatus.Pending);
+    }
+
+    if (canApprovePolicies)
+    {
+        pendingPolicyApprovals = Db.Policies.Count(p => p.Status == PolicyStatus.Draft);
+    }
+
+    if (canApproveReports)
+    {
+        pendingReportApprovals = Db.RegulatoryReports.Count(r => r.ReportStatus != null && r.ReportStatus.Name == "Submitted");
+    }
+
+    if (canApproveOrders)
+    {
+        pendingOrderApprovals = Db.ProcurementOrders.Count(p => p.ProcurementStatus != null && p.ProcurementStatus.Name == "Draft");
+    }
+
+    if (canViewCompliance)
+    {
+        complianceQueueCount = Db.ProcurementOrders.Count(p => p.ProcurementStatus != null && p.ProcurementStatus.Name == "Approved");
+    }
+
+    if (canViewCapa)
+    {
+        openCapaCount = Db.CorrectiveActions.Count(c => c.Status != CorrectiveActionStatus.Closed);
+    }
+
+    if (canViewChecks)
+    {
+        highRiskAlertCount = Db.ComplianceAlerts.Count(a =>
+            a.IsActive &&
+            (a.Severity == ComplianceAlertSeverity.High || a.Severity == ComplianceAlertSeverity.Critical));
+    }
+
+    var pendingTotalApprovals = pendingSupplierApprovals + pendingPolicyApprovals + pendingReportApprovals + pendingOrderApprovals;
+    var pendingOverrideRequests = 0;
+    if (isSuperAdmin)
+    {
+        pendingOverrideRequests = Db.Suppliers.Count(s => s.OverrideRequestActive);
+    }
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - FurniComply</title>
+    <script type="importmap"></script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Manrope:wght@300;400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/jquery.dataTables.min.css" />
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/FurniComply.Web.styles.css" asp-append-version="true" />
+    @RenderSection("Styles", required: false)
+</head>
+<body>
+    <a class="skip-link" href="#maincontent">Skip to content</a>
+    <div class="erp-shell @(isAuthenticated ? "" : "no-sidebar")">
+        @if (isAuthenticated)
+        {
+            <aside class="erp-sidebar">
+                <div class="sidebar-brand">
+                    <img src="~/images/logo.png" alt="FurniComply Logo" />
+                    <div>
+                        <span class="brand-name">FurniComply</span>
+                        <span class="brand-sub">Compliance</span>
+                    </div>
+                </div>
+                <nav class="sidebar-nav">
+                    <div class="sidebar-section">Overview</div>
+                    <a asp-controller="Dashboard" asp-action="Index">
+                        <i class="fa-solid fa-house"></i>
+                        <span class="sidebar-link-label">Dashboard</span>
+                        @if (isSuperAdmin && pendingOverrideRequests > 0)
+                        {
+                            <span class="sidebar-badge risk">@pendingOverrideRequests</span>
+                        }
+                        else if (pendingTotalApprovals > 0)
+                        {
+                            <span class="sidebar-badge">@pendingTotalApprovals</span>
+                        }
+                    </a>
+                    <a asp-controller="Search" asp-action="Index"><i class="fa-solid fa-magnifying-glass"></i> Global Search</a>
+
+                    @if (showGovernanceSection)
+                    {
+                        <div class="sidebar-section">Governance</div>
+                    }
+                    @if (canViewPolicies)
+                    {
+                        <a asp-controller="Policies" asp-action="Index">
+                            <i class="fa-solid fa-file-lines"></i>
+                            <span class="sidebar-link-label">Policies</span>
+                            @if (canApprovePolicies && pendingPolicyApprovals > 0)
+                            {
+                                <span class="sidebar-badge">@pendingPolicyApprovals</span>
+                            }
+                        </a>
+                    }
+                    @if (canViewCompliance)
+                    {
+                        <a asp-controller="Compliance" asp-action="Queue">
+                            <i class="fa-solid fa-clipboard-list"></i>
+                            <span class="sidebar-link-label">Compliance Queue</span>
+                            @if (complianceQueueCount > 0)
+                            {
+                                <span class="sidebar-badge">@complianceQueueCount</span>
+                            }
+                        </a>
+                    }
+                    @if (canViewChecks)
+                    {
+                        <a asp-controller="ComplianceChecks" asp-action="Index">
+                            <i class="fa-solid fa-clipboard-check"></i>
+                            <span class="sidebar-link-label">Checks</span>
+                            @if (highRiskAlertCount > 0)
+                            {
+                                <span class="sidebar-badge">@highRiskAlertCount</span>
+                            }
+                        </a>
+                    }
+                    @if (canViewCapa)
+                    {
+                        <a asp-controller="Capa" asp-action="Index">
+                            <i class="fa-solid fa-list-check"></i>
+                            <span class="sidebar-link-label">CAPA Dashboard</span>
+                            @if (openCapaCount > 0)
+                            {
+                                <span class="sidebar-badge">@openCapaCount</span>
+                            }
+                        </a>
+                    }
+
+                    @if (showSupplyChainSection)
+                    {
+                        <div class="sidebar-section">Supply Chain</div>
+                    }
+                    @if (canViewSuppliers)
+                    {
+                        <a asp-controller="Suppliers" asp-action="Index">
+                            <i class="fa-solid fa-industry"></i>
+                            <span class="sidebar-link-label">Suppliers</span>
+                            @if (isSuperAdmin && pendingOverrideRequests > 0)
+                            {
+                                <span class="sidebar-badge risk">@pendingOverrideRequests</span>
+                            }
+                            else if (pendingSupplierApprovals > 0)
+                            {
+                                <span class="sidebar-badge">@pendingSupplierApprovals</span>
+                            }
+                        </a>
+                    }
+                    @if (canViewSupplierDocuments)
+                    {
+                        <a asp-controller="Suppliers" asp-action="Documents"><i class="fa-solid fa-folder-open"></i> Supplier Documents</a>
+                    }
+                    @if (canViewOrders)
+                    {
+                        <a asp-controller="ProcurementOrders" asp-action="Index">
+                            <i class="fa-solid fa-truck-field"></i>
+                            <span class="sidebar-link-label">Orders</span>
+                            @if (pendingOrderApprovals > 0)
+                            {
+                                <span class="sidebar-badge">@pendingOrderApprovals</span>
+                            }
+                        </a>
+                    }
+
+                    @if (showReportingSection)
+                    {
+                        <div class="sidebar-section">Reporting</div>
+                    }
+                    @if (canViewReportsCenter)
+                    {
+                        <a asp-controller="ReportsCenter" asp-action="Index"><i class="fa-solid fa-chart-column"></i> Reports Center</a>
+                    }
+                    @if (canViewRegulatoryReports)
+                    {
+                        <a asp-controller="RegulatoryReports" asp-action="Index">
+                            <i class="fa-solid fa-chart-bar"></i>
+                            <span class="sidebar-link-label">Regulatory Reports</span>
+                            @if (pendingReportApprovals > 0)
+                            {
+                                <span class="sidebar-badge">@pendingReportApprovals</span>
+                            }
+                        </a>
+                    }
+                    @if (canViewAuditLogs)
+                    {
+                        <a asp-controller="AuditLogs" asp-action="Index"><i class="fa-solid fa-list-check"></i> Audit Logs</a>
+                        @if (isSuperAdmin)
+                        {
+                            <a asp-controller="AuditLogs" asp-action="Overrides">
+                                <i class="fa-solid fa-shield-halved"></i>
+                                <span class="sidebar-link-label">Override Logs</span>
+                            </a>
+                        }
+                    }
+
+                    @if (showAdministrationSection)
+                    {
+                        <div class="sidebar-section">Administration</div>
+                    }
+                    @if (canViewMasterData)
+                    {
+                        <a asp-controller="MasterData" asp-action="Index"><i class="fa-solid fa-database"></i> Master Data</a>
+                    }
+                    @if (canViewSettings)
+                    {
+                        <a asp-controller="Admin" asp-action="Users"><i class="fa-solid fa-gear"></i> Settings</a>
+                    }
+                    @if (canViewAlertRules)
+                    {
+                        <a asp-controller="ComplianceAlertRules" asp-action="Index"><i class="fa-solid fa-bell"></i> Alert Rules</a>
+                    }
+
+                    <div class="sidebar-section">Support</div>
+                    <a asp-controller="Home" asp-action="Privacy"><i class="fa-solid fa-shield-halved"></i> Privacy</a>
+                </nav>
+            </aside>
+            <div class="sidebar-overlay"></div>
+        }
+
+        <div class="erp-main">
+            @if (User.Identity?.IsAuthenticated ?? false)
+            {
+                <header class="erp-topbar">
+                    <div class="topbar-actions">
+                        <button type="button" class="mobile-nav-toggle" aria-label="Toggle navigation">
+                            <i class="fa-solid fa-bars"></i>
+                        </button>
+                        <div class="topbar-widgets">
+                            <div class="topbar-pill" id="topbar-rate-pill" title="Current USD to PHP Rate">
+                                <i class="fa-solid fa-money-bill-transfer"></i>
+                                <span class="pill-value" id="topbar-rate">--</span>
+                            </div>
+                            <div class="topbar-pill" id="topbar-weather-pill" title="Local Weather">
+                                <i class="fa-solid fa-cloud-sun"></i>
+                                <span class="pill-value" id="topbar-temp">--</span>
+                                <span class="pill-label" id="topbar-city"></span>
+                            </div>
+                        </div>
+                        <div class="profile-menu">
+                            <button type="button" class="profile-trigger">
+                                <span class="profile-identity">
+                                    <span class="profile-email">@User.Identity?.Name</span>
+                                    <i class="fa-solid fa-right-from-bracket logout-indicator" data-logout-now="true" title="Logout now"></i>
+                                </span>
+                                <span class="profile-role-wrap">
+                                    <span class="role-chip">
+                                        @if (User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.SuperAdmin))
+                                        {
+                                            <text>Super Admin</text>
+                                        }
+                                        else if (User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.ComplianceManager))
+                                        {
+                                            <text>Compliance</text>
+                                        }
+                                        else if (User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.Admin))
+                                        {
+                                            <text>Admin</text>
+                                        }
+                                        else if (User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.DepartmentHead))
+                                        {
+                                            <text>Dept Head</text>
+                                        }
+                                        else if (User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.Auditor))
+                                        {
+                                            <text>Auditor</text>
+                                        }
+                                        else if (User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.Procurement))
+                                        {
+                                            <text>Procurement</text>
+                                        }
+                                    </span>
+                                </span>
+                            </button>
+                            <div class="profile-dropdown">
+                                <form asp-controller="Account" asp-action="Logout" method="post" class="logout-form" id="quickLogoutForm">
+                                    <button type="submit" class="logout-button">
+                                        <span>Logout</span>
+                                        <i class="fa-solid fa-arrow-right-from-bracket"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </header>
+            }
+
+            <main role="main" class="erp-content" id="maincontent">
+                @{
+                    try
+                    {
+                        @RenderBody()
+                    }
+                    catch (Exception ex)
+                    {
+                        <div class="alert alert-danger">
+                            <strong>Page render error:</strong> @ex.Message
+                        </div>
+                    }
+                }
+            </main>
+
+            <footer>
+                <div>
+                    &copy; 2026 FurniComply - Compliance Management Platform
+                </div>
+            </footer>
+        </div>
+    </div>
+
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/jquery-validation/dist/jquery.validate.min.js"></script>
+    <script src="~/lib/jquery-validation-unobtrusive/dist/jquery.validate.unobtrusive.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+    <script>
+        $(document).ready(function () {
+            // Auto-upgrade selects to searchable dropdowns unless explicitly opted out.
+            const selector = "select:not(.no-select2):not(.js-no-select2):not(.select2-hidden-accessible):not([multiple]):not([data-select2='off'])";
+            $(selector).each(function () {
+                const $select = $(this);
+
+                if ($select.closest('.dataTables_length').length > 0 || $select.is('[hidden]')) {
+                    return;
+                }
+
+                const hasEmptyOption = $select.find('option[value=""]').length > 0;
+                const isRequired = $select.prop('required') === true;
+
+                $select.select2({
+                    width: '100%',
+                    placeholder: $select.attr('data-placeholder') || 'Search or select...',
+                    allowClear: hasEmptyOption && !isRequired,
+                    dropdownAutoWidth: false,
+                    dropdownParent: $(document.body)
+                });
+            });
+        });
+    </script>
+    @await RenderSectionAsync("Scripts", required: false)
+    <partial name="_Notifications" />
+</body>
+</html>

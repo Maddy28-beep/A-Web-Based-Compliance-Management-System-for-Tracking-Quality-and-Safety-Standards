@@ -1,0 +1,194 @@
+@model FurniComply.Domain.Entities.CorrectiveAction
+@using FurniComply.Domain.Enums
+
+@{
+    ViewData["Title"] = "CAPA Details";
+    var sourceLabel = Model.ComplianceCheckId.HasValue ? "Compliance Check" : "Supplier Performance";
+    var canManageChecks =
+        !User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.SuperAdmin) &&
+        (User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.Admin) ||
+         User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.ComplianceManager));
+}
+
+<header class="hero">
+    <div>
+        <p class="eyebrow">Corrective Action</p>
+        <h1>
+            @if (Model.ComplianceCheck != null && Model.ComplianceCheck.Policy != null)
+            {
+                @Model.ComplianceCheck.Policy.Title
+            }
+            else
+            {
+                @Model.Title
+            }
+        </h1>
+        <p class="lede">
+            @sourceLabel · Status @Model.Status · Due @Model.DueAtUtc.ToString("yyyy-MM-dd") (Local time) ·
+            @if (canManageChecks && !string.IsNullOrWhiteSpace(Model.AssignedTo) && Model.Status != CorrectiveActionStatus.Closed && Model.Status != CorrectiveActionStatus.EvidenceSubmitted)
+            {
+                <span>Assigned</span>
+                <form asp-controller="Capa" asp-action="Assign" method="post" class="d-inline-block align-middle ms-1" style="min-width: 200px;">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="id" value="@Model.Id" />
+                    <div class="input-group input-group-sm">
+                        <select name="assignedTo" class="form-select form-select-sm capa-assign-select" required style="min-width: 180px;">
+                            <option value="">-- Select --</option>
+                            @if (ViewBag.UserOptions != null)
+                            {
+                                foreach (var item in (SelectList)ViewBag.UserOptions)
+                                {
+                                    var isSel = !string.IsNullOrWhiteSpace(Model.AssignedTo) && item.Value == Model.AssignedTo;
+                                    if (isSel)
+                                    {
+                                        <option value="@item.Value" selected>@item.Text</option>
+                                    }
+                                    else
+                                    {
+                                        <option value="@item.Value">@item.Text</option>
+                                    }
+                                }
+                            }
+                        </select>
+                        <button type="submit" class="btn btn-outline-secondary btn-sm">Update</button>
+                    </div>
+                </form>
+            }
+            else
+            {
+                <span>Assigned @(ViewBag.AssignedToFullName ?? (string.IsNullOrWhiteSpace(Model.AssignedTo) ? "Unassigned" : Model.AssignedTo))</span>
+            }
+        </p>
+    </div>
+    <div class="hero-actions">
+        <a class="btn btn-outline-secondary" asp-controller="Capa" asp-action="Index"><i class="fa-solid fa-arrow-left"></i> Back</a>
+        @if (Model.ComplianceCheckId.HasValue)
+        {
+            <a class="btn btn-outline-secondary" asp-controller="ComplianceChecks" asp-action="Details" asp-route-id="@Model.ComplianceCheckId">Open Check</a>
+        }
+        else if (Model.SupplierId.HasValue)
+        {
+            <a class="btn btn-outline-secondary" asp-controller="Suppliers" asp-action="Details" asp-route-id="@Model.SupplierId">Open Supplier</a>
+        }
+    </div>
+</header>
+
+
+<div class="detail-card">
+    <h2 style="margin-top:0;">Details</h2>
+    <div class="row g-3">
+        <div class="col-md-6">
+            <dl>
+                <dt>Issue Type</dt>
+                <dd>@Model.IssueType</dd>
+                <dt>Description</dt>
+                <dd>@Model.Description</dd>
+                <dt>Evidence</dt>
+                <dd>@(string.IsNullOrWhiteSpace(Model.EvidenceNotes) ? "-" : Model.EvidenceNotes)</dd>
+            </dl>
+        </div>
+        <div class="col-md-6">
+            <dl>
+                <dt>Created (Local time)</dt>
+                <dd>@Model.CreatedAtUtc.ToLocalTime().ToString("yyyy-MM-dd hh:mm tt")</dd>
+                <dt>Updated (Local time)</dt>
+                <dd>@(Model.UpdatedAtUtc?.ToLocalTime().ToString("yyyy-MM-dd hh:mm tt") ?? "-")</dd>
+                <dt>Closed (Local time)</dt>
+                <dd>@(Model.ClosedAtUtc?.ToLocalTime().ToString("yyyy-MM-dd hh:mm tt") ?? "-")</dd>
+            </dl>
+        </div>
+    </div>
+</div>
+
+@if (canManageChecks && Model.Status != CorrectiveActionStatus.Closed)
+{
+    <div class="detail-card" style="margin-top: 1rem;">
+        <h2 style="margin-top: 0;">Workflow</h2>
+
+        @if (Model.Status == CorrectiveActionStatus.Open && string.IsNullOrWhiteSpace(Model.AssignedTo))
+        {
+            <p class="text-muted small mb-3">
+                <i class="fa-solid fa-circle-info me-1"></i>
+                Select the responsible person and set the due timeline before assigning this CAPA.
+            </p>
+            <form asp-controller="Capa" asp-action="Assign" method="post" class="row g-2 align-items-end">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" value="@Model.Id" />
+                <div class="col-auto">
+                    <label class="form-label">Assign To</label>
+                    <select class="form-select form-select-sm capa-assign-select" name="assignedTo" required style="min-width: 220px;">
+                        <option value="">-- Select Person --</option>
+                        @if (ViewBag.UserOptions != null)
+                        {
+                            foreach (var user in (SelectList)ViewBag.UserOptions)
+                            {
+                                <option value="@user.Value">@user.Text</option>
+                            }
+                        }
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <label class="form-label">Due in days</label>
+                    <input class="form-control" type="number" name="dueDays" value="14" min="1" max="30" />
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-primary">Assign</button>
+                </div>
+            </form>
+        }
+
+        @if (Model.Status == CorrectiveActionStatus.Open || Model.Status == CorrectiveActionStatus.Assigned || Model.Status == CorrectiveActionStatus.Overdue)
+        {
+            <p class="text-muted small mb-3">
+                <i class="fa-solid fa-circle-info me-1"></i>
+                Click <strong>Start</strong> to begin work on this CAPA. The assignee will move it to In Progress. You may add optional notes below.
+            </p>
+            <form asp-controller="Capa" asp-action="Start" method="post" class="capa-workflow-start-form">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" value="@Model.Id" />
+                <div class="row g-3 mb-3">
+                    <div class="col-12">
+                        <label class="form-label">Notes before proceeding <span class="text-muted">(optional)</span></label>
+                        <textarea class="form-control" name="startNotes" rows="2" placeholder="Add any notes, context, or instructions before starting..."></textarea>
+                    </div>
+                    <div class="col-auto">
+                        <button type="submit" class="btn btn-success"><i class="fa-solid fa-play me-1"></i> Start</button>
+                    </div>
+                </div>
+            </form>
+        }
+
+        @if (Model.Status == CorrectiveActionStatus.InProgress || Model.Status == CorrectiveActionStatus.Overdue)
+        {
+            <form asp-controller="Capa" asp-action="SubmitEvidence" method="post" class="d-inline">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" value="@Model.Id" />
+                <input type="hidden" name="evidenceNotes" value="Submitted via CAPA details page." />
+                <button type="submit" class="btn btn-success me-2">Submit Evidence</button>
+            </form>
+        }
+    </div>
+}
+
+@if (User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.Admin) || User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.ComplianceManager))
+{
+    @if (Model.Status == CorrectiveActionStatus.EvidenceSubmitted)
+    {
+        <div class="detail-card" style="margin-top: 1rem;">
+            <h2 style="margin-top: 0;">Verification</h2>
+            <form asp-controller="Capa" asp-action="Close" method="post" class="d-inline">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" value="@Model.Id" />
+                <div class="mb-3">
+                    <label class="form-label">Closure Notes</label>
+                    <textarea class="form-control" name="closureNotes" rows="3" placeholder="Verification and final closure remarks..." required></textarea>
+                </div>
+                <button type="submit" class="btn btn-success">Close</button>
+            </form>
+        </div>
+    }
+}
+
+@section Styles {
+    <link rel="stylesheet" href="~/css/capa-workflow.css" asp-append-version="true" />
+}

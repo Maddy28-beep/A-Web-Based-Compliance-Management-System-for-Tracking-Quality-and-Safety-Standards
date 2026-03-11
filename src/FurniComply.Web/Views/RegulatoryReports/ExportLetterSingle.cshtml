@@ -1,0 +1,97 @@
+@model FurniComply.Domain.Entities.RegulatoryReport
+@{
+    Layout = null;
+    var now = ((DateTime?)ViewBag.GeneratedAtUtc ?? DateTime.UtcNow).ToLocalTime();
+    var supplierName = Model.Supplier?.Name ?? "Supplier";
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Compliance Letter</title>
+    <style>
+        :root { --ink:#111827; --muted:#4b5563; --line:#d1d5db; --brand:#0f3b2f; }
+        * { box-sizing: border-box; }
+        body { margin:0; background:#f3f4f6; font-family: "Times New Roman", Georgia, serif; color:var(--ink); }
+        .page {
+            width: 8.5in;
+            min-height: 11in;
+            margin: 20px auto;
+            background: #fff;
+            padding: 0.85in;
+            border: 1px solid #e5e7eb;
+            box-shadow: 0 1px 8px rgba(0,0,0,.06);
+        }
+        .actions { width:8.5in; margin: 20px auto 0; display:flex; gap:10px; }
+        .btn { border:1px solid var(--brand); background:#fff; color:var(--brand); padding:10px 14px; border-radius:8px; font-family: "Segoe UI", sans-serif; font-weight:600; text-decoration:none; cursor:pointer; }
+        .btn.primary { background:var(--brand); color:#fff; }
+        .letterhead { border-bottom: 2px solid var(--line); padding-bottom: 12px; margin-bottom: 22px; }
+        .org { font-family: "Segoe UI", sans-serif; font-size: 24px; font-weight: 700; color:var(--brand); margin:0; }
+        .sub { font-family: "Segoe UI", sans-serif; margin: 2px 0 0; color:var(--muted); font-size: 13px; }
+        .meta { margin-top: 24px; line-height: 1.6; }
+        .subject { margin: 24px 0; font-weight: 700; }
+        .body { line-height: 1.8; font-size: 12pt; }
+        .section-title { margin-top: 22px; font-family:"Segoe UI",sans-serif; font-size: 12px; letter-spacing:.08em; text-transform: uppercase; color:var(--muted);}
+        .box { border:1px solid var(--line); padding:12px; border-radius: 6px; margin-top: 8px; line-height:1.6; }
+        .sig { margin-top: 40px; line-height: 1.7; }
+        .sig-line { margin-top: 38px; width: 260px; border-top: 1px solid #9ca3af; }
+        @@media print {
+            body { background:#fff; }
+            .actions { display:none; }
+            .page { margin:0; border:0; box-shadow:none; width:auto; min-height:auto; padding:0.75in; }
+        }
+    </style>
+</head>
+<body>
+    <div class="actions">
+        <button class="btn primary" onclick="window.print()">Print / Save as PDF</button>
+        <a class="btn" href="/RegulatoryReports"><i class="fa-solid fa-arrow-left"></i> Back to Reports</a>
+    </div>
+
+    <article class="page">
+        <header class="letterhead">
+            <h1 class="org">FurniComply Compliance Office</h1>
+            <p class="sub">Furniture Compliance Platform | Regulatory Reporting Unit</p>
+        </header>
+
+        <div class="meta">
+            <div>@now.ToString("MMMM dd, yyyy")</div>
+            <div style="margin-top:16px;">To: Compliance Contact, @supplierName</div>
+            <div>Subject: Regulatory Compliance Report Submission</div>
+        </div>
+
+        <p class="subject">Re: @Model.ReportType</p>
+
+        <div class="body">
+            <p>
+                This letter confirms submission of the regulatory compliance report for <strong>@supplierName</strong>
+                covering the reporting period <strong>@Model.PeriodStartUtc.ToString("yyyy-MM-dd")</strong> to
+                <strong>@Model.PeriodEndUtc.ToString("yyyy-MM-dd")</strong>.
+            </p>
+            <p>
+                Report status at issuance is <strong>@(Model.ReportStatus?.Name ?? "Draft")</strong>,
+                with submission date <strong>@(Model.SubmittedAtUtc?.ToString("yyyy-MM-dd") ?? "Pending")</strong>.
+                This document is generated from the official FurniComply system record.
+            </p>
+        </div>
+
+        <div class="section-title">Executive Summary</div>
+        <div class="box">@(string.IsNullOrWhiteSpace(Model.Summary) ? "-" : Model.Summary)</div>
+
+        <div class="section-title">Reference Details</div>
+        <div class="box">
+            <div><strong>Report ID:</strong> @Model.Id</div>
+            <div><strong>Supplier:</strong> @supplierName</div>
+            <div><strong>Generated (Local time):</strong> @now.ToString("yyyy-MM-dd hh:mm tt")</div>
+        </div>
+
+        <div class="sig">
+            Sincerely,<br />
+            FurniComply Regulatory Reporting Team
+            <div class="sig-line"></div>
+            Authorized Compliance Officer
+        </div>
+    </article>
+</body>
+</html>

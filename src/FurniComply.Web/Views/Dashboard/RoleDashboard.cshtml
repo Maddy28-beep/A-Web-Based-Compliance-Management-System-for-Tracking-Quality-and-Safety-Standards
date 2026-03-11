@@ -1,0 +1,692 @@
+@model FurniComply.Web.Models.RoleDashboardViewModel
+@using System.Globalization
+@using System.Text.RegularExpressions
+
+@{
+    ViewData["Title"] = $"{Model.RoleName} Dashboard";
+    var localNow = DateTime.Now;
+    var isSuperAdminRole = string.Equals(Model.RoleName, "Super Admin", StringComparison.OrdinalIgnoreCase);
+    var isProcurementRole = string.Equals(Model.RoleName, "Procurement Officer", StringComparison.OrdinalIgnoreCase);
+
+    int ParseFirstInteger(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return 0;
+        }
+
+        var match = Regex.Match(raw, @"-?\d+");
+        return match.Success && int.TryParse(match.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)
+            ? value
+            : 0;
+    }
+
+    int LookupNumber(params string[] keywords)
+    {
+        bool Match(string source) => keywords.Any(k => source.Contains(k, StringComparison.OrdinalIgnoreCase));
+
+        foreach (var metric in Model.Metrics)
+        {
+            if (Match(metric.Title))
+            {
+                return ParseFirstInteger(metric.Value);
+            }
+        }
+
+        foreach (var item in Model.ActionItems)
+        {
+            if (Match(item.Title))
+            {
+                return ParseFirstInteger(item.Detail);
+            }
+        }
+
+        foreach (var item in Model.Alerts)
+        {
+            if (Match(item.Title))
+            {
+                return ParseFirstInteger(item.Detail);
+            }
+        }
+
+        return 0;
+    }
+
+    var seedExpiringCerts = LookupNumber("expiring certs", "expiring");
+    var seedOpenCapa = LookupNumber("open capa", "open capa / findings");
+    var seedDraftOrders = LookupNumber("pending orders", "draft purchase orders");
+    var seedApprovedOrders = LookupNumber("approved orders");
+    var seedDocIssues = LookupNumber("supplier docs", "risk signals", "pending doc overrides", "document issues");
+    var seedCompliantSuppliers = LookupNumber("suppliers compliant", "compliant suppliers");
+    var seedSuspendedSuppliers = LookupNumber("suspended suppliers", "suppliers blocked", "non-compliant suppliers");
+    var seedTotalSuppliers = LookupNumber("total suppliers");
+    var seedActiveSuppliers = LookupNumber("active suppliers") > 0 ? LookupNumber("active suppliers") : (seedTotalSuppliers > 0 ? Math.Max(seedTotalSuppliers - seedSuspendedSuppliers, 0) : 0);
+}
+
+<div class="erp-cockpit">
+<section class="dash-hero @(isSuperAdminRole ? "superadmin-hero" : "")">
+    <div>
+        <p class="eyebrow">ERP Operations</p>
+        @if (isSuperAdminRole)
+        {
+            <span class="superadmin-mark">Governance Mode</span>
+        }
+        <h1>@Model.RoleName Dashboard</h1>
+        <p class="lede">@Model.Focus</p>
+        <div class="dash-meta">
+            <span>Last refresh: <strong>@localNow.ToString("MMM dd, yyyy hh:mm tt")</strong></span>
+            <span>Source: <strong>Live operational modules</strong></span>
+        </div>
+        <div class="dash-date-filter @(Context.Request.Query.ContainsKey("from") || Context.Request.Query.ContainsKey("to") ? "dash-date-filter-active" : "")">
+            <div class="dash-date-filter-header">
+                <span class="dash-date-filter-label"><i class="fa-solid fa-calendar-days"></i> Date range</span>
+                @if (Context.Request.Query.ContainsKey("from") || Context.Request.Query.ContainsKey("to"))
+                {
+                    <span class="dash-date-filter-badge"><i class="fa-solid fa-check"></i> Filtered</span>
+                }
+            </div>
+            <form class="dash-date-filter-form" method="get" asp-action="Index" asp-controller="Dashboard">
+                <div class="dash-date-inputs">
+                    <label class="dash-date-field">
+                        <span class="dash-date-field-label">From</span>
+                        <input type="date" name="from" id="dashFrom" class="form-control" value="@Context.Request.Query["from"]" />
+                    </label>
+                    <span class="dash-date-sep">—</span>
+                    <label class="dash-date-field">
+                        <span class="dash-date-field-label">To</span>
+                        <input type="date" name="to" id="dashTo" class="form-control" value="@Context.Request.Query["to"]" />
+                    </label>
+                </div>
+                <div class="dash-date-actions">
+                    <button type="submit" class="btn btn-success dash-date-apply"><i class="fa-solid fa-filter"></i> Apply</button>
+                    @if (Context.Request.Query.ContainsKey("from") || Context.Request.Query.ContainsKey("to"))
+                    {
+                        <a href="@Context.Request.Path" class="btn btn-outline-secondary dash-date-reset"><i class="fa-solid fa-rotate-left"></i> Reset</a>
+                    }
+                </div>
+            </form>
+        </div>
+    </div>
+    <div class="dash-actions role-dash-actions">
+        <a class="button ghost" href="/AuditLogs/Index"><i class="fa-solid fa-fingerprint me-2"></i>Audit Logs</a>
+        <a class="button ghost" href="/Suppliers/Index"><i class="fa-solid fa-industry me-2"></i>Suppliers</a>
+        <a class="button ghost" href="/ProcurementOrders/Index"><i class="fa-solid fa-file-invoice-dollar me-2"></i>Orders</a>
+        @if (!isSuperAdminRole && !isProcurementRole)
+        {
+            <a class="button ghost" href="/Capa/Index"><i class="fa-solid fa-toolbox me-2"></i>CAPA Dashboard</a>
+        }
+    </div>
+</section>
+
+<div class="erp-section-header">
+    <span class="erp-section-badge"><i class="fa-solid fa-gauge-high"></i></span>
+    <div>
+        <h2 class="erp-section-title">System Status</h2>
+        <p class="erp-section-desc">Quick overview of supplier operational status and procurement activity.</p>
+        <p class="erp-section-meta small text-muted mb-0">Early-warning alerts track <strong>expiring certifications</strong> (within 30 days) and <strong>overdue renewals</strong>. View <a href="/Suppliers/Documents">Supplier Documents</a> for expiry dates.</p>
+    </div>
+</div>
+<section class="erp-kpi-grid">
+    <a class="erp-kpi-card @(seedExpiringCerts > 0 ? "kpi-soft-orange" : "kpi-soft-slate")" href="/Suppliers/Documents?expiring=1" title="Certifications expiring within 30 days or already overdue">
+        <div class="erp-kpi-icon" aria-hidden="true"><i class="fa-solid fa-bell"></i></div>
+        <div class="erp-kpi-value" id="kpiActiveAlerts">@seedExpiringCerts</div>
+        <div class="erp-kpi-label">Expiring Certs &amp; Renewals</div>
+    </a>
+    <a class="erp-kpi-card kpi-soft-slate" href="/Suppliers/Index">
+        <div class="erp-kpi-icon" aria-hidden="true"><i class="fa-solid fa-industry"></i></div>
+        <div class="erp-kpi-value" id="kpiTotalSuppliers">@seedTotalSuppliers</div>
+        <div class="erp-kpi-label">Total Suppliers</div>
+    </a>
+    <a class="erp-kpi-card kpi-soft-green" href="/Suppliers/Index">
+        <div class="erp-kpi-icon" aria-hidden="true"><i class="fa-solid fa-user-check"></i></div>
+        <div class="erp-kpi-value" id="kpiActiveSuppliers">@seedActiveSuppliers</div>
+        <div class="erp-kpi-label">Active Suppliers</div>
+    </a>
+    <a class="erp-kpi-card kpi-soft-orange" href="/Suppliers/Index">
+        <div class="erp-kpi-icon" aria-hidden="true"><i class="fa-solid fa-user-lock"></i></div>
+        <div class="erp-kpi-value" id="kpiSuspendedSuppliers">@seedSuspendedSuppliers</div>
+        <div class="erp-kpi-label">Suspended Suppliers</div>
+    </a>
+    <a class="erp-kpi-card kpi-soft-green" href="/Suppliers/Index">
+        <div class="erp-kpi-icon" aria-hidden="true"><i class="fa-solid fa-circle-check"></i></div>
+        <div class="erp-kpi-value" id="kpiSuppliersCompliant">@seedCompliantSuppliers</div>
+        <div class="erp-kpi-label">Suppliers Compliant</div>
+    </a>
+    <a class="erp-kpi-card kpi-soft-red" href="/Suppliers/Documents">
+        <div class="erp-kpi-icon" aria-hidden="true"><i class="fa-solid fa-folder-open"></i></div>
+        <div class="erp-kpi-value" id="kpiSuppliersDocIssues">@seedDocIssues</div>
+        <div class="erp-kpi-label">Suppliers With Document Issues</div>
+    </a>
+    <a class="erp-kpi-card kpi-soft-orange" href="/Capa/Index">
+        <div class="erp-kpi-icon" aria-hidden="true"><i class="fa-solid fa-triangle-exclamation"></i></div>
+        <div class="erp-kpi-value" id="kpiOpenCapa">@seedOpenCapa</div>
+        <div class="erp-kpi-label">Open CAPA Cases</div>
+    </a>
+    <a class="erp-kpi-card kpi-soft-green" href="/ProcurementOrders/Index">
+        <div class="erp-kpi-icon" aria-hidden="true"><i class="fa-solid fa-clipboard-check"></i></div>
+        <div class="erp-kpi-value" id="kpiApprovedOrders">@seedApprovedOrders</div>
+        <div class="erp-kpi-label">Approved Orders</div>
+    </a>
+</section>
+
+<div class="erp-section-header">
+    <span class="erp-section-badge"><i class="fa-solid fa-chart-line"></i></span>
+    <div>
+        <h2 class="erp-section-title">Compliance Analytics</h2>
+        <p class="erp-section-desc">Risk patterns and supplier compliance performance monitoring.</p>
+    </div>
+</div>
+<section class="erp-analytics-grid">
+    <div class="chart-card">
+        <div class="chart-header">
+            <div>
+                <h3 class="chart-title-with-help"><span>Supplier Compliance Trend</span> <span class="grid-help" title="Supplier compliance monitoring trend over time."><i class="fa-solid fa-circle-info"></i></span></h3>
+                <p class="chart-sub">Operational trend view for supplier compliance performance.</p>
+            </div>
+        </div>
+        <canvas id="erpComplianceTrendChart"></canvas>
+        <div class="chart-metrics chart-metrics-inline">
+            <span class="risk-metric"><span class="metric-dot" style="background:#1f5a45;"></span>Latest <strong id="trendLatestLabel">0</strong></span>
+            <span class="risk-metric"><span class="metric-dot" style="background:#2b8a5a;"></span>Peak <strong id="trendPeakLabel">0</strong></span>
+            <span class="risk-metric"><span class="metric-dot" style="background:#607168;"></span>Period <strong id="trendPeriodLabel">0 months</strong></span>
+        </div>
+    </div>
+    <div class="chart-card">
+        <div class="chart-header">
+            <div>
+                <h3 class="chart-title-with-help"><span>Supplier Risk Level</span> <span class="grid-help" title="Compliant, At Risk, and High Risk supplier distribution."><i class="fa-solid fa-circle-info"></i></span></h3>
+                <p class="chart-sub">Operational distribution of supplier risk levels.</p>
+            </div>
+        </div>
+        <canvas id="erpRiskDistributionChart"></canvas>
+        <div class="chart-metrics chart-metrics-inline">
+            <span class="risk-metric"><span class="metric-dot" style="background:#2b8a5a;"></span>Compliant <strong id="riskCompliantLabel">0 (0%)</strong></span>
+            <span class="risk-metric"><span class="metric-dot" style="background:#2b64c6;"></span>Adequate <strong id="riskAtRiskLabel">0 (0%)</strong></span>
+            <span class="risk-metric"><span class="metric-dot" style="background:#c03b47;"></span>Needs Attention <strong id="riskHighRiskLabel">0 (0%)</strong></span>
+        </div>
+    </div>
+    <div class="chart-card">
+        <div class="chart-header">
+            <div>
+                <h3 class="chart-title-with-help"><span>CAPA Activity Chart</span> <span class="grid-help" title="Open, Closed, and Overdue CAPA activity."><i class="fa-solid fa-circle-info"></i></span></h3>
+                <p class="chart-sub">Operational workload view for CAPA status and closure health.</p>
+            </div>
+        </div>
+        <canvas id="erpCapaActivityChart"></canvas>
+        <div class="chart-metrics">
+            <div><small><span class="metric-dot" style="background:#2b64c6;"></span>Open CAPA</small><strong id="capaOpenLabel">0</strong></div>
+            <div><small><span class="metric-dot" style="background:#2b8a5a;"></span>Closed CAPA</small><strong id="capaClosedLabel">0</strong></div>
+            <div><small><span class="metric-dot" style="background:#c03b47;"></span>Overdue CAPA</small><strong id="capaOverdueLabel">0</strong></div>
+        </div>
+    </div>
+</section>
+
+<div class="erp-section-header">
+    <span class="erp-section-badge"><i class="fa-solid fa-clipboard-list"></i></span>
+    <div>
+        <h2 class="erp-section-title">Operational Monitoring</h2>
+        <p class="erp-section-desc">Latest procurement transactions and corrective action tracking.</p>
+    </div>
+</div>
+<section class="erp-operational-grid">
+    <div class="table-card erp-table-card">
+        <div class="table-card-header">
+            <div>
+                <h3 class="table-card-title">Recent Purchase Orders</h3>
+                <p class="table-card-subtitle">Operational feed of the most recent purchase orders.</p>
+            </div>
+        </div>
+        <div class="detail-table-wrap">
+            <table class="table compact">
+                <thead>
+                    <tr>
+                        <th style="width:22%;">Order</th>
+                        <th>Supplier</th>
+                        <th class="table-cell-center" style="width:22%;">Status</th>
+                        <th class="table-cell-right amount-col">Amount</th>
+                    </tr>
+                </thead>
+                <tbody id="erpRecentOrdersBody">
+                    <tr>
+                        <td colspan="4" class="text-center py-3">Loading data...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="table-card erp-table-card">
+        <div class="table-card-header">
+            <div>
+                <h3 class="table-card-title">CAPA Monitoring</h3>
+                <p class="table-card-subtitle">Operational list of corrective actions requiring monitoring.</p>
+            </div>
+        </div>
+        <div class="detail-table-wrap">
+            <table class="table compact">
+                <thead>
+                    <tr>
+                        <th>Supplier</th>
+                        <th>Issue</th>
+                        <th class="table-cell-center">Status</th>
+                    </tr>
+                </thead>
+                <tbody id="erpCapaMonitoringBody">
+                    <tr>
+                        <td colspan="3" class="text-center py-3">Loading data...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<div class="erp-section-header">
+    <span class="erp-section-badge"><i class="fa-solid fa-triangle-exclamation"></i></span>
+    <div>
+        <h2 class="erp-section-title">Risk Watchlist</h2>
+        <p class="erp-section-desc">Suppliers requiring immediate attention based on compliance scoring.</p>
+    </div>
+</div>
+<section class="table-card erp-table-card">
+    <div class="table-card-header">
+        <div>
+            <h3 class="table-card-title">Supplier Risk Watchlist</h3>
+            <p class="table-card-subtitle">Operational watchlist of suppliers requiring immediate attention.</p>
+        </div>
+    </div>
+    <div class="detail-table-wrap">
+        <table class="table compact">
+            <thead>
+                <tr>
+                    <th>Supplier</th>
+                    <th class="table-cell-right">Compliance Score</th>
+                    <th class="table-cell-center">Risk Level</th>
+                </tr>
+            </thead>
+            <tbody id="erpRiskWatchlistBody">
+                <tr>
+                    <td colspan="3" class="text-center py-3">Loading data...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        (function () {
+            const textOf = (el) => (el ? (el.textContent || "").trim() : "");
+            const toInt = (value) => {
+                const match = String(value ?? "").match(/-?\d+/);
+                return match ? Number(match[0]) : 0;
+            };
+
+            const escapeHtml = (raw) => String(raw ?? "")
+                .replaceAll("&", "&amp;")
+                .replaceAll("<", "&lt;")
+                .replaceAll(">", "&gt;")
+                .replaceAll("\"", "&quot;")
+                .replaceAll("'", "&#39;");
+
+            const setValue = (id, value) => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = String(value);
+            };
+
+            const setRows = (tbodyId, rows, emptyCols, emptyText) => {
+                const body = document.getElementById(tbodyId);
+                if (!body) return;
+                if (!rows || rows.length === 0) {
+                    body.innerHTML = `<tr><td colspan="${emptyCols}" class="text-center py-3">${escapeHtml(emptyText)}</td></tr>`;
+                    return;
+                }
+                body.innerHTML = rows.join("");
+            };
+
+            const fetchHtml = async (path) => {
+                try {
+                    const response = await fetch(path, { credentials: "same-origin" });
+                    if (!response.ok) return null;
+                    const html = await response.text();
+                    return new DOMParser().parseFromString(html, "text/html");
+                } catch {
+                    return null;
+                }
+            };
+
+            const parseSupplierData = (doc) => {
+                const rows = Array.from(doc?.querySelectorAll("table.suppliers-table tbody tr") ?? []);
+                const suppliers = rows.map((row) => {
+                    const name = textOf(row.querySelector("td:nth-child(2)"));
+                    const status = textOf(row.querySelector("td:nth-child(4) .badge"));
+                    const approval = textOf(row.querySelector("td:nth-child(5) .approval-pill"));
+                    const ratingText = textOf(row.querySelector(".supplier-rating-value"));
+                    const riskBand = textOf(row.querySelector(".supplier-rating-band"));
+                    const rating = Number.parseFloat(ratingText || "0");
+                    const score = Number.isFinite(rating) ? Math.round(rating * 20) : 0;
+
+                    const hasDocIssue = status.includes("SUSPENDED") || status.includes("ON HOLD") || approval.includes("PENDING") || approval.includes("REJECTED");
+                    const highRisk = riskBand.toUpperCase().includes("NEEDS ATTENTION") || riskBand.toUpperCase().includes("HIGH") || status.includes("SUSPENDED");
+                    const atRisk = !highRisk && (riskBand.toUpperCase().includes("ADEQUATE") || riskBand.toUpperCase().includes("MEDIUM") || status.includes("ON HOLD"));
+                    const compliant = status.includes("ACTIVE") && approval.includes("APPROVED") && riskBand.toUpperCase().includes("LOW");
+
+                    return { name, status, approval, riskBand, score, hasDocIssue, highRisk, atRisk, compliant };
+                });
+
+                const total = suppliers.length;
+                const active = suppliers.filter(s => s.status.includes("ACTIVE")).length;
+                const suspended = suppliers.filter(s => s.status.includes("SUSPENDED")).length;
+                const compliantCount = suppliers.filter(s => s.compliant).length;
+                const docIssues = suppliers.filter(s => s.hasDocIssue).length;
+                const highRisk = suppliers.filter(s => s.highRisk).length;
+                const atRisk = suppliers.filter(s => s.atRisk).length;
+
+                const watchlist = suppliers
+                    .filter(s => s.highRisk || s.atRisk || s.hasDocIssue)
+                    .sort((a, b) => a.score - b.score)
+                    .slice(0, 8)
+                    .map(s => {
+                        const riskLevel = s.highRisk ? "Needs Attention" : "Adequate";
+                        const chipClass = s.highRisk ? "status-chip risk" : "status-chip warn";
+                        return `<tr>
+                            <td>${escapeHtml(s.name || "-")}</td>
+                            <td class="table-cell-right">${escapeHtml(s.score)}</td>
+                            <td class="table-cell-center"><span class="${chipClass}">${escapeHtml(riskLevel)}</span></td>
+                        </tr>`;
+                    });
+
+                return { total, active, suspended, compliantCount, docIssues, highRisk, atRisk, watchlist };
+            };
+
+            const parseOrdersData = (doc) => {
+                const rows = Array.from(doc?.querySelectorAll("table.order-queue-table tbody tr") ?? []);
+                let draft = 0;
+                let approved = 0;
+
+                const recentRows = rows.slice(0, 6).map((row) => {
+                    const cells = row.querySelectorAll("td");
+                    const order = textOf(cells[0]);
+                    const amount = textOf(cells[1]);
+                    const supplier = textOf(cells[2]);
+                    const status = textOf(cells[3]);
+
+                    const upperStatus = status.toUpperCase();
+                    if (upperStatus.includes("DRAFT")) draft++;
+                    if (upperStatus.includes("APPROVED") || upperStatus.includes("ORDERED") || upperStatus.includes("RECEIVED")) approved++;
+
+                    const chip = upperStatus.includes("APPROVED") || upperStatus.includes("ORDERED") || upperStatus.includes("RECEIVED")
+                        ? "status-chip good"
+                        : upperStatus.includes("DRAFT") || upperStatus.includes("SUBMITTED")
+                            ? "status-chip neutral"
+                            : upperStatus.includes("REJECTED") || upperStatus.includes("CANCELLED")
+                                ? "status-chip risk"
+                                : "status-chip muted";
+
+                    return `<tr>
+                        <td>${escapeHtml(order || "-")}</td>
+                        <td>${escapeHtml(supplier || "-")}</td>
+                        <td class="table-cell-center"><span class="${chip}">${escapeHtml(status || "-")}</span></td>
+                        <td class="table-cell-right amount-cell"><span class="amount-nowrap">${escapeHtml(amount || "-")}</span></td>
+                    </tr>`;
+                });
+
+                if (rows.length > recentRows.length) {
+                    const allStatuses = rows.map((row) => textOf(row.querySelector("td:nth-child(3)")).toUpperCase());
+                    draft = allStatuses.filter(s => s.includes("DRAFT")).length;
+                    approved = allStatuses.filter(s => s.includes("APPROVED") || s.includes("ORDERED") || s.includes("RECEIVED")).length;
+                }
+
+                return { draft, approved, recentRows };
+            };
+
+            const parseCapaData = (doc) => {
+                const rows = Array.from(doc?.querySelectorAll("table.capa-table tbody tr") ?? []);
+                let open = 0;
+                let closed = 0;
+                let overdue = 0;
+
+                const monitoringRows = rows.slice(0, 8).map((row) => {
+                    const issue = textOf(row.querySelector("td:nth-child(1) .badge")) || textOf(row.querySelector("td:nth-child(1)"));
+                    const supplier = textOf(row.querySelector("td:nth-child(2)"));
+                    const capaStatus = textOf(row.querySelector("td:nth-child(4) .badge")) || textOf(row.querySelector("td:nth-child(4)"));
+                    const upper = capaStatus.toUpperCase();
+
+                    if (upper.includes("OVERDUE")) overdue++;
+                    else if (upper.includes("CLOSED")) closed++;
+                    else open++;
+
+                    const chipClass = upper.includes("OVERDUE")
+                        ? "status-chip risk"
+                        : upper.includes("CLOSED")
+                            ? "status-chip good"
+                            : "status-chip neutral";
+
+                    return `<tr>
+                        <td>${escapeHtml(supplier || "-")}</td>
+                        <td>${escapeHtml(issue || "-")}</td>
+                        <td class="table-cell-center"><span class="${chipClass}">${escapeHtml(capaStatus || "-")}</span></td>
+                    </tr>`;
+                });
+
+                if (rows.length > monitoringRows.length) {
+                    const allStatuses = rows.map((row) => (textOf(row.querySelector("td:nth-child(4)")).toUpperCase()));
+                    overdue = allStatuses.filter(s => s.includes("OVERDUE")).length;
+                    closed = allStatuses.filter(s => s.includes("CLOSED")).length;
+                    open = Math.max(allStatuses.length - overdue - closed, 0);
+                }
+
+                return { open, closed, overdue, monitoringRows };
+            };
+
+            const buildCharts = (trendLabels, trendValues, riskData, capaData) => {
+                if (!window.Chart) return;
+
+                const trendCtx = document.getElementById("erpComplianceTrendChart");
+                const riskCtx = document.getElementById("erpRiskDistributionChart");
+                const capaCtx = document.getElementById("erpCapaActivityChart");
+
+                if (trendCtx) {
+                    const gradient = trendCtx.getContext("2d").createLinearGradient(0, 0, 0, 300);
+                    gradient.addColorStop(0, "rgba(31, 90, 69, 0.25)");
+                    gradient.addColorStop(1, "rgba(31, 90, 69, 0.02)");
+                    new Chart(trendCtx, {
+                        type: "line",
+                        data: {
+                            labels: trendLabels,
+                            datasets: [{
+                                label: "Checks",
+                                data: trendValues,
+                                borderColor: "#1f5a45",
+                                backgroundColor: gradient,
+                                fill: true,
+                                tension: 0.4,
+                                borderWidth: 2.5,
+                                pointBackgroundColor: "#ffffff",
+                                pointBorderColor: "#1f5a45",
+                                pointBorderWidth: 2,
+                                pointRadius: 4,
+                                pointHoverRadius: 7,
+                                pointHoverBackgroundColor: "#1f5a45",
+                                pointHoverBorderColor: "#ffffff",
+                                pointHoverBorderWidth: 2
+                            }]
+                        },
+                        options: {
+                            plugins: { legend: { display: false } },
+                            animation: { duration: 800 },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    ticks: { precision: 0, stepSize: 1 },
+                                    grid: { color: "rgba(31, 54, 44, 0.06)" }
+                                },
+                                x: {
+                                    grid: { display: false }
+                                }
+                            },
+                            responsive: true,
+                            maintainAspectRatio: false
+                        }
+                    });
+                    const vals = (trendValues || []).map(v => Number(v) || 0);
+                    const latest = vals.length > 0 ? vals[vals.length - 1] : 0;
+                    const latestLabel = trendLabels && trendLabels.length > 0 ? trendLabels[trendLabels.length - 1] : "-";
+                    const peak = vals.length > 0 ? Math.max(...vals) : 0;
+                    const period = trendLabels ? trendLabels.length : 0;
+                    setValue("trendLatestLabel", latest);
+                    setValue("trendPeakLabel", peak);
+                    setValue("trendPeriodLabel", period > 0 ? period + " months" : "-");
+                }
+
+                if (riskCtx) {
+                    const rawRiskValues = [riskData.compliant, riskData.atRisk, riskData.highRisk].map(v => Number(v) || 0);
+                    const rawRiskTotal = rawRiskValues.reduce((sum, current) => sum + current, 0);
+                    const epsilon = 0.001;
+                    const displayRiskValues = rawRiskValues.map(v => (v === 0 ? epsilon : v));
+
+                    const compliantPct = rawRiskTotal > 0 ? ((rawRiskValues[0] / rawRiskTotal) * 100).toFixed(1) : "0.0";
+                    const atRiskPct = rawRiskTotal > 0 ? ((rawRiskValues[1] / rawRiskTotal) * 100).toFixed(1) : "0.0";
+                    const highRiskPct = rawRiskTotal > 0 ? ((rawRiskValues[2] / rawRiskTotal) * 100).toFixed(1) : "0.0";
+
+                    setValue("riskCompliantLabel", `${rawRiskValues[0]} (${compliantPct}%)`);
+                    setValue("riskAtRiskLabel", `${rawRiskValues[1]} (${atRiskPct}%)`);
+                    setValue("riskHighRiskLabel", `${rawRiskValues[2]} (${highRiskPct}%)`);
+
+                    new Chart(riskCtx, {
+                        type: "doughnut",
+                        data: {
+                            labels: ["Compliant", "Adequate", "Needs Attention"],
+                            datasets: [{
+                                data: displayRiskValues,
+                                backgroundColor: ["#2b8a5a", "#2b64c6", "#c03b47"],
+                                borderWidth: 2,
+                                borderColor: "#ffffff",
+                                hoverBorderColor: "#ffffff",
+                                hoverOffset: 6
+                            }]
+                        },
+                        options: {
+                            plugins: {
+                                legend: { display: false },
+                                tooltip: {
+                                    callbacks: {
+                                        label: function (context) {
+                                            const index = context.dataIndex;
+                                            const labels = ["Compliant", "Adequate", "Needs Attention"];
+                                            const pct = index === 0 ? compliantPct : (index === 1 ? atRiskPct : highRiskPct);
+                                            return `${labels[index]}: ${rawRiskValues[index]} (${pct}%)`;
+                                        }
+                                    }
+                                }
+                            },
+                            cutout: "66%",
+                            responsive: true,
+                            maintainAspectRatio: false
+                        }
+                    });
+                }
+
+                if (capaCtx) {
+                    const rawCapaValues = [capaData.open, capaData.closed, capaData.overdue].map(v => Number(v) || 0);
+                    const displayCapaValues = rawCapaValues.map(v => (v === 0 ? 0.03 : v));
+
+                    setValue("capaOpenLabel", rawCapaValues[0]);
+                    setValue("capaClosedLabel", rawCapaValues[1]);
+                    setValue("capaOverdueLabel", rawCapaValues[2]);
+
+                    new Chart(capaCtx, {
+                        type: "bar",
+                        data: {
+                            labels: ["Open CAPA", "Closed CAPA", "Overdue CAPA"],
+                            datasets: [{
+                                data: displayCapaValues,
+                                backgroundColor: ["#2b64c6", "#2b8a5a", "#c03b47"],
+                                borderRadius: 6,
+                                maxBarThickness: 48
+                            }]
+                        },
+                        options: {
+                            plugins: { legend: { display: false } },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    suggestedMax: Math.max(5, rawCapaValues[0], rawCapaValues[1], rawCapaValues[2]),
+                                    ticks: { precision: 0, stepSize: 1 },
+                                    grid: { color: "rgba(31, 54, 44, 0.06)" }
+                                },
+                                x: {
+                                    grid: { display: false }
+                                }
+                            },
+                            responsive: true,
+                            maintainAspectRatio: false
+                        }
+                    });
+                }
+            };
+
+            var hasDateFilter = @(string.IsNullOrEmpty(ViewBag.DateFilterFrom as string) && string.IsNullOrEmpty(ViewBag.DateFilterTo as string) ? "false" : "true");
+            var filterFrom = "@(ViewBag.DateFilterFrom ?? "")";
+            var filterTo = "@(ViewBag.DateFilterTo ?? "")";
+            var trendUrl = hasDateFilter && (filterFrom || filterTo)
+                ? "/Dashboard/TrendData?metric=checks&from=" + encodeURIComponent(filterFrom) + "&to=" + encodeURIComponent(filterTo)
+                : "/Dashboard/TrendData?metric=checks";
+
+            Promise.all([
+                hasDateFilter ? Promise.resolve(null) : fetchHtml("/Suppliers/Index"),
+                hasDateFilter ? Promise.resolve(null) : fetchHtml("/ProcurementOrders/Index"),
+                hasDateFilter ? Promise.resolve(null) : fetchHtml("/Capa/Index"),
+                fetch(trendUrl, { credentials: "same-origin" }).then(r => r.ok ? r.json() : null).catch(() => null)
+            ]).then(([suppliersDoc, ordersDoc, capaDoc, trendData]) => {
+                var supplierData = hasDateFilter ? {} : parseSupplierData(suppliersDoc || "");
+                var ordersData = hasDateFilter ? {} : parseOrdersData(ordersDoc || "");
+                var capaData = hasDateFilter ? {} : parseCapaData(capaDoc || "");
+
+                if (!hasDateFilter) {
+                    setValue("kpiTotalSuppliers", supplierData.total || @seedTotalSuppliers);
+                    setValue("kpiActiveSuppliers", supplierData.active || @seedActiveSuppliers);
+                    setValue("kpiSuspendedSuppliers", supplierData.suspended || @seedSuspendedSuppliers);
+                    setValue("kpiSuppliersCompliant", supplierData.compliantCount || @seedCompliantSuppliers);
+                    setValue("kpiSuppliersDocIssues", supplierData.docIssues || @seedDocIssues);
+                    setValue("kpiOpenCapa", capaData.open || @seedOpenCapa);
+                    setValue("kpiDraftOrders", ordersData.draft || @seedDraftOrders);
+                    setValue("kpiApprovedOrders", ordersData.approved || @seedApprovedOrders);
+                    setRows("erpRecentOrdersBody", ordersData.recentRows || [], 4, "No purchase orders available.");
+                    setRows("erpCapaMonitoringBody", capaData.monitoringRows || [], 3, "No CAPA records available.");
+                    setRows("erpRiskWatchlistBody", supplierData.watchlist || [], 3, "No watchlist items.");
+                }
+
+                const labels = Array.isArray(trendData?.labels) ? trendData.labels : [];
+                const values = Array.isArray(trendData?.values) ? trendData.values.map(v => Number(v) || 0) : [];
+
+                buildCharts(
+                    labels.length ? labels : ["No Data"],
+                    values.length ? values : [0],
+                    {
+                        compliant: hasDateFilter ? @seedCompliantSuppliers : (supplierData.compliantCount || @seedCompliantSuppliers),
+                        atRisk: supplierData.atRisk || 0,
+                        highRisk: hasDateFilter ? @seedSuspendedSuppliers : (supplierData.highRisk || @seedSuspendedSuppliers)
+                    },
+                    {
+                        open: hasDateFilter ? @seedOpenCapa : (capaData.open || @seedOpenCapa),
+                        closed: capaData.closed || 0,
+                        overdue: capaData.overdue || 0
+                    }
+                );
+            }).catch(() => {
+                setRows("erpRecentOrdersBody", [], 4, "Unable to load order data.");
+                setRows("erpCapaMonitoringBody", [], 3, "Unable to load CAPA data.");
+                setRows("erpRiskWatchlistBody", [], 3, "Unable to load risk watchlist.");
+                buildCharts(
+                    ["No Data"],
+                    [0],
+                    { compliant: 0, atRisk: 0, highRisk: 0 },
+                    { open: 0, closed: 0, overdue: 0 }
+                );
+            });
+        })();
+    </script>
+}

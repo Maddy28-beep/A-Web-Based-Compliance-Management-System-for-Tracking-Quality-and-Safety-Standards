@@ -1,0 +1,42 @@
+@model FurniComply.Domain.Entities.SupplierComplianceDocument
+
+@{
+    ViewData["Title"] = "Add Supplier Document";
+}
+
+<section class="hero">
+    <div>
+        <p class="eyebrow">Procurement</p>
+        <h1>Add Supplier Document</h1>
+        <p class="lede">Capture compliance document metadata.</p>
+    </div>
+</section>
+
+<div class="form-card">
+    <form asp-action="DocumentCreate" method="post" enctype="multipart/form-data">
+        <input type="hidden" asp-for="SupplierId" />
+        <div asp-validation-summary="All" class="text-danger"></div>
+        <p class="widget-meta">Upload and maintain one file per required document type.</p>
+        <div class="form-grid">
+            <label>Document Type
+                <select asp-for="DocumentType" asp-items="ViewBag.DocumentTypeOptions"></select>
+            </label>
+            <label>Status
+                <input value="Auto (Missing/Pending/Verified/Expired based on file + expiry)" readonly />
+            </label>
+            <label>Expiry Date (Local time)
+                <input asp-for="ExpiryDateUtc" type="date" />
+            </label>
+            <label>Upload File
+                <input type="file" name="uploads" />
+            </label>
+        </div>
+        <label>Notes
+            <textarea asp-for="Notes" rows="4"></textarea>
+        </label>
+        <div class="form-actions">
+            <a class="btn btn-outline-secondary" asp-action="Details" asp-route-id="@Model.SupplierId"><i class="fa-solid fa-xmark"></i> Cancel</a>
+            <button class="btn btn-success" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save</button>
+        </div>
+    </form>
+</div>

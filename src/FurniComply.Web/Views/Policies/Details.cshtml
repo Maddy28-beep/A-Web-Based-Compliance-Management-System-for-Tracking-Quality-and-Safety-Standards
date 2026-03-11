@@ -1,0 +1,82 @@
+@model FurniComply.Domain.Entities.Policy
+
+@{
+    ViewData["Title"] = "Policy Details";
+    var isOperationalAdmin = User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.Admin) &&
+        !User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.SuperAdmin);
+}
+
+<header class="hero">
+    <div>
+        <p class="eyebrow">Policy Management</p>
+        <h1>@Model.Title</h1>
+        <p class="lede">Code @Model.Code - Version @Model.Version - Owner @Model.Owner - Category @(Model.PolicyCategory?.Name ?? "-")</p>
+    </div>
+    <div class="hero-actions">
+        <a class="btn btn-outline-secondary" asp-action="Index"><i class="fa-solid fa-arrow-left"></i> Back</a>
+        @if (isOperationalAdmin && Model.PolicyVersions.Count > 1)
+        {
+            <a class="btn btn-outline-secondary" asp-action="RollbackSelect" asp-route-id="@Model.Id"><i class="fa-solid fa-rotate-left"></i> Rollback</a>
+        }
+        @if (isOperationalAdmin)
+        {
+            <a class="btn btn-outline-secondary" asp-action="Edit" asp-route-id="@Model.Id"><i class="fa-solid fa-pen"></i> Edit</a>
+        }
+    </div>
+</header>
+
+<div class="detail-card">
+    <dl>
+        <dt>Status</dt>
+        <dd>@Model.Status</dd>
+        <dt>Category</dt>
+        <dd>@(Model.PolicyCategory?.Name ?? "-")</dd>
+        <dt>Effective Date (Local time)</dt>
+        <dd>@Model.EffectiveDateUtc.ToString("yyyy-MM-dd")</dd>
+        <dt>Content</dt>
+        <dd>@Model.Content</dd>
+    </dl>
+</div>
+
+<section class="detail-grid detail-grid-single">
+    <div class="detail-card detail-section">
+        <div class="section-header">
+            <h3>Policy Version History</h3>
+            <span class="status-chip neutral">Persisted</span>
+        </div>
+        <div class="detail-table-wrap">
+            <table class="table compact">
+                <thead>
+                    <tr>
+                        <th>Version</th>
+                        <th>Status</th>
+                        <th>Effective</th>
+                        <th>Owner</th>
+                        <th>Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model.PolicyVersions.Any())
+                    {
+                        @foreach (var version in Model.PolicyVersions.OrderByDescending(v => v.EffectiveDateUtc).ThenByDescending(v => v.CreatedAtUtc))
+                        {
+                            <tr>
+                                <td>@version.VersionNumber</td>
+                                <td><span class="status-chip muted">@version.Status</span></td>
+                                <td>@version.EffectiveDateUtc.ToString("yyyy-MM-dd")</td>
+                                <td class="table-cell-owner">@version.Owner</td>
+                                <td class="table-cell-notes">@version.Notes</td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="5">No policy versions recorded yet.</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>

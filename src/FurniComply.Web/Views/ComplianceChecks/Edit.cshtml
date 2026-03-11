@@ -1,0 +1,55 @@
+@model FurniComply.Domain.Entities.ComplianceCheck
+
+@{
+    ViewData["Title"] = "Edit Compliance Check";
+}
+
+<header class="page-header">
+    <div>
+        <p class="eyebrow">Compliance Monitoring</p>
+        <h1>Edit Compliance Check</h1>
+        <p class="lede">Update an existing compliance check record.</p>
+        <div class="page-meta" aria-label="Page context">
+            <span class="meta-pill"><i class="fa-solid fa-clock"></i> Dates shown in local time</span>
+        </div>
+    </div>
+    <div class="page-header-actions">
+        <a class="btn btn-outline-secondary" asp-action="Details" asp-route-id="@Model.Id"><i class="fa-solid fa-arrow-left"></i> Back</a>
+    </div>
+</header>
+
+<div class="form-card compliance-check-form">
+    <form asp-action="Edit" method="post">
+        <input type="hidden" asp-for="Id" />
+        <div class="form-section">
+            <h4 class="form-section-title">Check Details</h4>
+            <div class="form-grid">
+                <label>Policy
+                    <select asp-for="PolicyId" asp-items="ViewBag.PolicyId" class="js-select2"></select>
+                </label>
+                <label>Status
+                    <select asp-for="ComplianceStatusId" asp-items="ViewBag.ComplianceStatusId"></select>
+                </label>
+                <label>Category
+                    <select asp-for="ComplianceCategoryId" asp-items="ViewBag.ComplianceCategoryId"></select>
+                </label>
+                <label>Risk Level
+                    <select asp-for="RiskLevelId" asp-items="ViewBag.RiskLevelId"></select>
+                </label>
+                <label>Checked Date
+                    <input asp-for="CheckedAtUtc" type="date" title="Stored and displayed as local time" />
+                </label>
+            </div>
+        </div>
+        <div class="form-section">
+            <h4 class="form-section-title">Notes</h4>
+            <label class="form-label-full">
+                <textarea asp-for="Notes" rows="3" class="form-control" style="min-width:100%; min-height:4em; resize:horizontal;" placeholder="Evidence, observations, or corrective notes"></textarea>
+            </label>
+        </div>
+        <div class="form-actions">
+            <button class="btn btn-success" type="submit">Save</button>
+            <a class="btn btn-outline-secondary" asp-action="Details" asp-route-id="@Model.Id">Cancel</a>
+        </div>
+    </form>
+</div>

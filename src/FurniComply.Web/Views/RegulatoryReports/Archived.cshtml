@@ -1,0 +1,91 @@
+@model IEnumerable<FurniComply.Domain.Entities.RegulatoryReport>
+
+@{
+    ViewData["Title"] = "Archived Regulatory Reports";
+    var isOperationalAdmin = User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.Admin) &&
+        !User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.SuperAdmin);
+    var canManageReports = User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.ComplianceManager) &&
+        !User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.SuperAdmin);
+    var overrideReportIds = ViewBag.OverrideReportIds as IEnumerable<Guid> ?? Enumerable.Empty<Guid>();
+}
+
+<header class="hero">
+    <div>
+        <p class="eyebrow">Regulatory Reporting</p>
+        <h1>Archived Reports</h1>
+        <p class="lede">Soft-deleted reports retained for audit history and potential restoration.</p>
+        <div class="page-meta" aria-label="Page context">
+            <span class="meta-pill"><i class="fa-solid fa-clock"></i> Dates shown in local time</span>
+            <span class="meta-pill"><i class="fa-solid fa-box-archive"></i> @Model.Count() archived</span>
+        </div>
+    </div>
+    <div class="hero-actions">
+        <a class="btn btn-outline-secondary" asp-action="Index"><i class="fa-solid fa-arrow-left"></i> Back to Active</a>
+    </div>
+</header>
+
+@if (!Model.Any())
+{
+    <section class="empty-state" aria-label="No archived regulatory reports">
+        <div class="empty-state-icon"><i class="fa-solid fa-box-archive"></i></div>
+        <div>
+            <h3>No archived reports</h3>
+            <p>Archived reports will appear here for audit history and restoration.</p>
+            <div class="empty-state-actions">
+                <a class="btn btn-outline-secondary" asp-action="Index"><i class="fa-solid fa-arrow-left"></i> Back to Active</a>
+            </div>
+        </div>
+    </section>
+}
+else
+{
+    <div class="table-card">
+        <div class="table-card-header">
+            <div>
+                <h3 class="table-card-title">Archived</h3>
+                <p class="table-card-subtitle">Click a row to open details and restore.</p>
+            </div>
+        </div>
+        <table class="table data-table">
+        <thead>
+            <tr>
+                <th>Report</th>
+                <th>Supplier</th>
+                <th>Period</th>
+                <th>Status</th>
+                <th>Archived On</th>
+                <th>Submitted</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var item in Model)
+        {
+            <tr data-href="@Url.Action("Details", new { id = item.Id })">
+                <td class="table-primary-text">@item.ReportType</td>
+                <td>@(item.Supplier?.Name ?? "All suppliers")</td>
+                <td>@item.PeriodStartUtc.ToString("yyyy-MM-dd") - @item.PeriodEndUtc.ToString("yyyy-MM-dd")</td>
+                <td>
+                    @(item.ReportStatus?.Name ?? "-")
+                    @if ((item.ReportStatus?.Name ?? "") == "Accepted" && overrideReportIds.Contains(item.Id))
+                    {
+                        <span class="badge bg-warning text-dark ms-1">Override</span>
+                    }
+                </td>
+                <td>@(item.DeletedAtUtc?.ToString("yyyy-MM-dd") ?? "-")</td>
+                <td>@(item.SubmittedAtUtc?.ToString("yyyy-MM-dd") ?? "-")</td>
+            </tr>
+        }
+        </tbody>
+        </table>
+    </div>
+}
+
+@section Scripts {
+    <script>
+        $(function () {
+            $('.data-table').DataTable({
+                order: [[3, 'desc']]
+            });
+        });
+    </script>
+}

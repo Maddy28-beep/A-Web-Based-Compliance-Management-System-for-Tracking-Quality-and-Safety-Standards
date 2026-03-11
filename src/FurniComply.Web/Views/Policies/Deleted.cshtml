@@ -1,0 +1,58 @@
+@model IEnumerable<FurniComply.Domain.Entities.Policy>
+
+@{
+    ViewData["Title"] = "Restore Policies";
+}
+
+<section class="hero">
+    <div>
+        <p class="eyebrow">Policy Management</p>
+        <h1>Restore Policies</h1>
+        <p class="lede">Soft-deleted policies are retained for 1 year.</p>
+    </div>
+    <div class="hero-actions">
+        <a class="btn btn-outline-secondary" asp-action="Index"><i class="fa-solid fa-arrow-left"></i> Back</a>
+    </div>
+</section>
+
+<div class="table-card">
+    <table class="table data-table">
+        <thead>
+            <tr>
+                <th>Policy</th>
+                <th>Category</th>
+                <th>Status</th>
+                <th>Deleted At</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in Model)
+            {
+                <tr>
+                    <td>@item.Title</td>
+                    <td>@item.PolicyCategory?.Name</td>
+                    <td>@item.Status</td>
+                    <td>@(item.DeletedAtUtc.HasValue ? item.DeletedAtUtc.Value.ToString("yyyy-MM-dd") : "-")</td>
+                    <td class="actions-cell">
+                        <form asp-action="Restore" method="post">
+                            <input type="hidden" name="id" value="@item.Id" />
+                            @Html.AntiForgeryToken()
+                            <button class="btn btn-outline-secondary btn-sm" type="submit">Restore</button>
+                        </form>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@section Scripts {
+    <script>
+        $(function () {
+            $('.data-table').DataTable({
+                order: [[3, 'desc']]
+            });
+        });
+    </script>
+}

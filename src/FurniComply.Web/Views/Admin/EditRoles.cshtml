@@ -1,0 +1,33 @@
+﻿@model FurniComply.Web.Models.UserRolesViewModel
+
+@{
+    ViewData["Title"] = "Edit Roles";
+}
+
+<section class="hero">
+    <div>
+        <p class="eyebrow">Super Admin</p>
+        <h1>Edit Roles</h1>
+        <p class="lede">@Model.Email</p>
+    </div>
+</section>
+
+<div class="form-card">
+    <form asp-action="EditRoles" method="post">
+        <input type="hidden" asp-for="Id" />
+        <div class="form-grid role-grid">
+            @for (var i = 0; i < Model.Roles.Count; i++)
+            {
+                <label>
+                    <input type="hidden" asp-for="Roles[@i].Name" />
+                    <input asp-for="Roles[@i].Selected" type="checkbox" />
+                    @Model.Roles[i].Name
+                </label>
+            }
+        </div>
+        <div class="hero-actions">
+            <button class="button primary" type="submit">Save</button>
+            <a class="button ghost" asp-action="Users">Cancel</a>
+        </div>
+    </form>
+</div>

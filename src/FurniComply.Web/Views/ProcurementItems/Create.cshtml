@@ -1,0 +1,128 @@
+@model FurniComply.Domain.Entities.ProcurementItem
+
+@{
+    ViewData["Title"] = "Add Order Item";
+    var itemNameSuggestions = (ViewBag.ItemNameSuggestions as IEnumerable<string> ?? Enumerable.Empty<string>()).ToList();
+    var qualitySuggestions = (ViewBag.QualityStandardSuggestions as IEnumerable<string> ?? Enumerable.Empty<string>()).ToList();
+    var itemCatalogJson = ViewBag.ItemCatalogJson as string ?? "[]";
+    var lockOrderSelection = ViewBag.LockOrderSelection is bool isLocked && isLocked;
+}
+
+<section class="hero">
+    <div>
+        <p class="eyebrow">Procurement</p>
+        <h1>Add Order Item</h1>
+        <p class="lede">Attach a line item to a purchase order.</p>
+    </div>
+</section>
+
+<div class="form-card">
+    <form asp-action="Create" method="post">
+        <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+        <div class="form-grid procurement-item-form-grid">
+            <label>Order
+                @if (lockOrderSelection)
+                {
+                    <select asp-for="ProcurementOrderId" asp-items="ViewBag.ProcurementOrderId" disabled class="js-select2"></select>
+                    <input type="hidden" asp-for="ProcurementOrderId" />
+                    <div class="widget-meta">Locked to selected purchase order.</div>
+                }
+                else
+                {
+                    <select asp-for="ProcurementOrderId" asp-items="ViewBag.ProcurementOrderId" class="js-select2"></select>
+                }
+                <span asp-validation-for="ProcurementOrderId" class="text-danger"></span>
+            </label>
+            <label>Item Name
+                <select asp-for="ItemName" id="ItemName" class="no-select2">
+                    <option value="">Select item...</option>
+                    <option value="__new__" selected>+ New item (enter name below)</option>
+                    @foreach (var option in itemNameSuggestions)
+                    {
+                        <option value="@option">@option</option>
+                    }
+                </select>
+                <span asp-validation-for="ItemName" class="text-danger"></span>
+            </label>
+            <label id="CustomItemNameWrap" class="proc-item-custom-name">New Item Name
+                <input id="CustomItemName" name="customItemName" placeholder="e.g. Ergonomic Office Chair" class="form-control" />
+            </label>
+            <label>Quantity
+                <input asp-for="Quantity" type="number" />
+                <span asp-validation-for="Quantity" class="text-danger"></span>
+            </label>
+            <label>Unit Cost (USD)
+                <div class="input-group po-currency-group">
+                    <span class="input-group-text">$</span>
+                    <input asp-for="UnitCost" type="number" step="0.01" class="form-control po-currency-input" />
+                </div>
+                <span asp-validation-for="UnitCost" class="text-danger"></span>
+            </label>
+            <label>Quality Standard
+                <select asp-for="QualityStandard" id="QualityStandard" class="no-select2">
+                    <option value="">Select standard...</option>
+                    @foreach (var option in qualitySuggestions)
+                    {
+                        <option value="@option">@option</option>
+                    }
+                    <option value="Custom">+ Other (specify in notes)</option>
+                </select>
+                <span asp-validation-for="QualityStandard" class="text-danger"></span>
+            </label>
+        </div>
+        <label>Notes
+            <textarea asp-for="Notes" rows="4"></textarea>
+            <span asp-validation-for="Notes" class="text-danger"></span>
+        </label>
+        <div class="form-actions">
+            <a class="btn btn-outline-secondary" asp-controller="ProcurementOrders" asp-action="Index"><i class="fa-solid fa-xmark"></i> Cancel</a>
+            <button class="btn btn-success" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save</button>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        (function () {
+            const catalog = @Html.Raw(itemCatalogJson);
+            const itemName = document.getElementById("ItemName");
+            const unitCost = document.getElementById("UnitCost");
+            const quality = document.getElementById("QualityStandard");
+
+            itemName?.addEventListener("change", function () {
+                const isNew = itemName.value === "__new__";
+                const customWrap = document.getElementById("CustomItemNameWrap");
+                if (customWrap) {
+                    customWrap.style.display = isNew ? "" : "none";
+                }
+                if (isNew) {
+                    if (unitCost) {
+                        unitCost.value = "";
+                    }
+                    return;
+                }
+                const selected = catalog.find(x => x.Name === itemName.value);
+                if (!selected) {
+                    return;
+                }
+
+                if (unitCost) {
+                    unitCost.value = Number(selected.UnitCost || 0).toFixed(2);
+                }
+
+                if (quality && selected.QualityStandard) {
+                    const existing = Array.from(quality.options).find(o => o.value === selected.QualityStandard);
+                    if (!existing) {
+                        const option = document.createElement("option");
+                        option.value = selected.QualityStandard;
+                        option.textContent = selected.QualityStandard;
+                        quality.appendChild(option);
+                    }
+                    quality.value = selected.QualityStandard;
+                }
+            });
+        })();
+    </script>
+}
+

@@ -1,0 +1,56 @@
+@model FurniComply.Domain.Entities.RegulatoryReport
+
+@{
+    ViewData["Title"] = "Create Report";
+}
+
+<header class="page-header">
+    <div>
+        <p class="eyebrow">Regulatory Reporting</p>
+        <h1>Create Report</h1>
+        <p class="lede">Draft a new regulatory report.</p>
+        <div class="page-meta" aria-label="Page context">
+            <span class="meta-pill"><i class="fa-solid fa-clock"></i> Dates shown in local time</span>
+            <span class="meta-pill"><i class="fa-solid fa-pen-to-square"></i> Draft</span>
+        </div>
+    </div>
+    <div class="page-header-actions">
+        <a class="btn btn-outline-secondary" asp-action="Index"><i class="fa-solid fa-arrow-left"></i> Back</a>
+    </div>
+</header>
+
+<div class="form-card">
+    <form asp-action="Create" method="post">
+        <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+        <div class="form-grid">
+            <label>Report Type
+                <select asp-for="ReportType" asp-items="ViewBag.ReportTypeOptions"></select>
+                <span asp-validation-for="ReportType" class="text-danger"></span>
+                <div class="field-help">Choose which regulatory obligation / authority this report is for.</div>
+            </label>
+            <label>Supplier
+                <select asp-for="SupplierId" asp-items="ViewBag.SupplierId" class="js-select2"></select>
+                <span asp-validation-for="SupplierId" class="text-danger"></span>
+                <div class="field-help">Select the supplier this regulatory evidence is for.</div>
+            </label>
+            <label>Period Start (Local time)
+                <input asp-for="PeriodStartUtc" type="date" />
+                <span asp-validation-for="PeriodStartUtc" class="text-danger"></span>
+            </label>
+            <label>Period End (Local time)
+                <input asp-for="PeriodEndUtc" type="date" />
+                <span asp-validation-for="PeriodEndUtc" class="text-danger"></span>
+                <div class="field-help">Defaults to the last 30 days. Adjust to match your reporting window.</div>
+            </label>
+        </div>
+        <label>Summary
+            <textarea asp-for="Summary" rows="5"></textarea>
+            <span asp-validation-for="Summary" class="text-danger"></span>
+            <div class="field-help">Short executive summary for reviewers and exports.</div>
+        </label>
+        <div class="form-actions">
+            <button class="btn btn-success" type="submit">Save Draft</button>
+            <a class="btn btn-outline-secondary" asp-action="Index">Cancel</a>
+        </div>
+    </form>
+</div>

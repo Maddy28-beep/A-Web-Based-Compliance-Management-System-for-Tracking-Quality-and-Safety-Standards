@@ -1,0 +1,119 @@
+@model IEnumerable<FurniComply.Domain.Entities.AuditLog>
+
+@{
+    ViewData["Title"] = "Audit Logs";
+    var canExportAudit =
+        User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.SuperAdmin) ||
+        User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.Admin) ||
+        User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.ComplianceManager);
+    TimeZoneInfo tz;
+    try
+    {
+        tz = TimeZoneInfo.FindSystemTimeZoneById("Asia/Manila");
+    }
+    catch
+    {
+        try
+        {
+            tz = TimeZoneInfo.FindSystemTimeZoneById("Singapore Standard Time");
+        }
+        catch
+        {
+            tz = TimeZoneInfo.Local;
+        }
+    }
+}
+
+<header class="hero">
+    <div>
+        <p class="eyebrow">Compliance Governance</p>
+        <h1>Audit Logs</h1>
+        <p class="lede">Immutable audit trail for all critical actions.</p>
+    </div>
+</header>
+
+<div class="form-card">
+    <form method="get" asp-action="Index">
+        <div class="form-grid">
+            <label>Actor
+                <select name="actor">
+                    <option value="">All</option>
+                    @foreach (var item in (IEnumerable<string>)ViewBag.Actors)
+                    {
+                        <option value="@item" selected="@(item == (string?)ViewBag.Actor ? "selected" : null)">@item</option>
+                    }
+                </select>
+            </label>
+            <label>Entity
+                <select name="entity">
+                    <option value="">All</option>
+                    @foreach (var item in (IEnumerable<string>)ViewBag.Entities)
+                    {
+                        <option value="@item" selected="@(item == (string?)ViewBag.Entity ? "selected" : null)">@item</option>
+                    }
+                </select>
+            </label>
+            <label>Action
+                <select name="auditAction">
+                    <option value="">All</option>
+                    @foreach (var item in (IEnumerable<string>)ViewBag.Actions)
+                    {
+                        <option value="@item" selected="@(item == (string?)ViewBag.AuditAction ? "selected" : null)">@item</option>
+                    }
+                </select>
+            </label>
+            <label>From
+                <input type="date" name="from" value="@ViewBag.From" />
+            </label>
+            <label>To
+                <input type="date" name="to" value="@ViewBag.To" />
+            </label>
+        </div>
+        <div class="hero-actions">
+            <a class="btn btn-light" asp-action="Index">Reset Filters</a>
+            <a class="btn btn-outline-secondary" asp-action="Overrides"><i class="fa-solid fa-shield-halved"></i> Dedicated Override Logs</a>
+            @if (canExportAudit)
+            {
+                <a class="btn export-btn export-btn-excel"
+                   asp-action="ExportCsv"
+                   asp-route-from="@ViewBag.From"
+                   asp-route-to="@ViewBag.To"><i class="fa-solid fa-table"></i> CSV</a>
+            }
+            <button class="btn btn-success px-4" type="submit"><i class="fa-solid fa-filter"></i> Apply Filters</button>
+        </div>
+    </form>
+</div>
+
+<div class="table-card">
+    <table class="table data-table">
+        <thead>
+            <tr>
+                <th>Entity</th>
+                <th>Action</th>
+                <th>Actor</th>
+                <th>Timestamp (PHT)</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var item in Model)
+        {
+            <tr data-href="@Url.Action("Details", new { id = item.Id })">
+                <td>@item.EntityName</td>
+                <td>@item.Action</td>
+                <td>@item.Actor</td>
+                <td>@TimeZoneInfo.ConvertTimeFromUtc(item.TimestampUtc, tz).ToString("yyyy-MM-dd hh:mm tt")</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+
+@section Scripts {
+    <script>
+        $(function () {
+            $('.data-table').DataTable({
+                order: [[3, 'desc']]
+            });
+        });
+    </script>
+}

@@ -1,0 +1,185 @@
+@model FurniComply.Web.Models.SupplierDocumentsIndexViewModel
+
+@{
+    ViewData["Title"] = "Supplier Documents";
+}
+
+<section class="hero">
+    <div>
+        <p class="eyebrow">Procurement</p>
+        <h1>Supplier Documents</h1>
+        <p class="lede">Filter and manage compliance document metadata.</p>
+    </div>
+</section>
+
+@{
+    object PageRouteValues(int p) => new { supplierId = Model.SupplierId, status = Model.Status, documentType = Model.DocumentType, search = Model.Search, expiring = Model.Expiring, pageSize = Model.PageSize, page = p };
+}
+<div class="supplier-docs-filter-card">
+    @if (Model.Expiring)
+    {
+        <div class="supplier-docs-active-filter">
+            <span class="supplier-docs-filter-badge"><i class="fa-solid fa-clock"></i> Expiring soon or expired</span>
+            <a class="supplier-docs-clear-filter" asp-action="Documents" title="Clear filter"><i class="fa-solid fa-times"></i></a>
+        </div>
+    }
+    <form method="get" asp-action="Documents" class="supplier-docs-filter-form">
+        <input type="hidden" name="page" value="1" />
+        <input type="hidden" name="pageSize" value="@Model.PageSize" />
+        <div class="supplier-docs-filter-row">
+            <div class="supplier-docs-filter-field">
+                <label>Search</label>
+                <input type="text" name="search" value="@Model.Search" class="form-control form-control-sm" placeholder="Supplier or document..." />
+            </div>
+            <div class="supplier-docs-filter-field">
+                <label>Supplier</label>
+                <select name="supplierId" class="form-select form-select-sm">
+                    <option value="">All suppliers</option>
+                    @foreach (var supplier in Model.Suppliers)
+                    {
+                        <option value="@supplier.Id" selected="@(Model.SupplierId == supplier.Id)">@supplier.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="supplier-docs-filter-field">
+                <label>Status</label>
+                <select name="status" class="form-select form-select-sm">
+                    <option value="">All statuses</option>
+                    @foreach (var status in Enum.GetValues(typeof(FurniComply.Domain.Enums.SupplierDocumentStatus)))
+                    {
+                        <option value="@status" selected="@(Model.Status?.ToString() == status.ToString())">@status</option>
+                    }
+                </select>
+            </div>
+            <div class="supplier-docs-filter-field">
+                <label>Document Type</label>
+                <select name="documentType" class="form-select form-select-sm">
+                    <option value="">All types</option>
+                    @foreach (var type in Model.DocumentTypes)
+                    {
+                        <option value="@type" selected="@(Model.DocumentType == type)">@type</option>
+                    }
+                </select>
+            </div>
+        </div>
+        <div class="supplier-docs-filter-actions-row">
+            <label class="supplier-docs-expiring-toggle">
+                <input type="checkbox" name="expiring" value="true" @(Model.Expiring ? "checked" : "") />
+                <span><i class="fa-solid fa-bell"></i> Expiring within 30 days or expired</span>
+            </label>
+            <div class="supplier-docs-filter-buttons">
+                <button class="btn btn-sm btn-primary" type="submit"><i class="fa-solid fa-filter me-1"></i> Apply</button>
+                <a class="btn btn-sm btn-outline-secondary" asp-action="Documents">Reset</a>
+            </div>
+        </div>
+    </form>
+</div>
+
+<div class="table-card">
+    @{
+        var docGroups = Model.Documents
+            .GroupBy(d => d.SupplierId)
+            .OrderByDescending(g => g.Max(d => d.UpdatedAtUtc ?? d.CreatedAtUtc));
+    }
+    @if (!docGroups.Any())
+    {
+        <p class="text-muted py-4 text-center">@(Model.Expiring ? "No suppliers with documents expiring within 30 days or already expired." : "No documents found.")</p>
+    }
+    else
+    {
+        @foreach (var grp in docGroups)
+        {
+            var supplier = grp.First().Supplier;
+            var docs = grp.OrderBy(d => d.DocumentType).ToList();
+            <div class="supplier-docs-group">
+                <h3 class="supplier-docs-group-title">
+                    <a href="@Url.Action("Details", "Suppliers", new { id = supplier?.Id })">@(supplier?.Name ?? "Unknown")</a>
+                    <span class="badge bg-secondary ms-2">@docs.Count document(s)</span>
+                </h3>
+                <table class="table data-table supplier-docs-table">
+                    <thead>
+                        <tr>
+                            <th class="col-doc-type">Type</th>
+                            <th class="table-cell-center col-doc-status">Status</th>
+                            <th class="table-cell-center table-cell-nowrap col-doc-expiry">Expiry</th>
+                            <th class="table-cell-center table-cell-nowrap col-doc-cert">Certification</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var doc in docs)
+                        {
+                            <tr data-href="@Url.Action("Details", "Suppliers", new { id = doc.SupplierId })">
+                                <td class="col-doc-type">@doc.DocumentType</td>
+                                <td class="table-cell-center col-doc-status">@doc.DocumentStatus</td>
+                                <td class="table-cell-center table-cell-nowrap col-doc-expiry">@(doc.ExpiryDateUtc.HasValue ? doc.ExpiryDateUtc.Value.ToString("MMM dd, yyyy") : "-")</td>
+                                <td class="table-cell-center table-cell-nowrap col-doc-cert">@(string.IsNullOrWhiteSpace(supplier?.Certifications) ? "-" : supplier.Certifications)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        @if (Model.TotalSupplierCount > 0)
+        {
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mt-3 pt-3 border-top supplier-docs-pagination-bar">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="text-muted">Show</span>
+                    <form method="get" asp-action="Documents" class="d-inline">
+                        <input type="hidden" name="page" value="1" />
+                        <input type="hidden" name="supplierId" value="@Model.SupplierId" />
+                        <input type="hidden" name="status" value="@Model.Status" />
+                        <input type="hidden" name="documentType" value="@Model.DocumentType" />
+                        <input type="hidden" name="search" value="@Model.Search" />
+                        @if (Model.Expiring) { <input type="hidden" name="expiring" value="true" /> }
+                        <select name="pageSize" class="form-select form-select-sm" style="width: auto;" onchange="this.form.submit()">
+                            @foreach (var size in new[] { 3, 10, 25, 50 })
+                            {
+                                <option value="@size" selected="@(Model.PageSize == size)">@size</option>
+                            }
+                        </select>
+                    </form>
+                    <span class="text-muted">suppliers per page</span>
+                </div>
+                <div class="text-muted small">
+                    Showing @((Model.Page - 1) * Model.PageSize + 1)–@(Math.Min(Model.Page * Model.PageSize, Model.TotalSupplierCount)) of @Model.TotalSupplierCount
+                </div>
+                <nav aria-label="Supplier documents pagination">
+                    <ul class="pagination pagination-sm mb-0">
+                        <li class="page-item @(Model.Page <= 1 ? "disabled" : "")">
+                            <a class="page-link" href="@(Model.Page <= 1 ? "#" : Url.Action("Documents", "Suppliers", PageRouteValues(Model.Page - 1)))">Previous</a>
+                        </li>
+                        @{
+                            var start = Math.Max(1, Model.Page - 2);
+                            var end = Math.Min(Model.TotalPages, Model.Page + 2);
+                            for (var i = start; i <= end; i++)
+                            {
+                                <li class="page-item @(i == Model.Page ? "active" : "")">
+                                    <a class="page-link" href="@Url.Action("Documents", "Suppliers", PageRouteValues(i))">@i</a>
+                                </li>
+                            }
+                        }
+                        <li class="page-item @(Model.Page >= Model.TotalPages ? "disabled" : "")">
+                            <a class="page-link" href="@(Model.Page >= Model.TotalPages ? "#" : Url.Action("Documents", "Suppliers", PageRouteValues(Model.Page + 1)))">Next</a>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+        }
+    }
+</div>
+
+@section Scripts {
+    <script>
+        $(function () {
+            $('.supplier-docs-table').each(function () {
+                $(this).DataTable({
+                    autoWidth: false,
+                    order: [[2, 'desc']],
+                    paging: false,
+                    searching: false,
+                    info: false
+                });
+            });
+        });
+    </script>
+}

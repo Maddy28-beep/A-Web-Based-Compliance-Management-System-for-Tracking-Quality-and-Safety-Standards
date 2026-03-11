@@ -1,0 +1,153 @@
+@model FurniComply.Domain.Entities.Supplier
+
+@{
+    ViewData["Title"] = "Create Supplier";
+    bool HasError(string key)
+    {
+        if (ViewData.ModelState.ContainsKey(key) && ViewData.ModelState[key]!.Errors.Count > 0) return true;
+        foreach (var k in ViewData.ModelState.Keys)
+            if ((k == key || k.EndsWith("." + key)) && ViewData.ModelState[k]!.Errors.Count > 0) return true;
+        return false;
+    }
+}
+
+<header class="page-header">
+    <div>
+        <p class="eyebrow">Procurement</p>
+        <h1>Create Supplier</h1>
+        <p class="lede">Register a new supplier profile.</p>
+        <div class="page-meta" aria-label="Page context">
+            <span class="meta-pill"><i class="fa-solid fa-user-plus"></i> New supplier</span>
+            <span class="meta-pill"><i class="fa-solid fa-clock"></i> Dates shown in local time</span>
+        </div>
+    </div>
+    <div class="page-header-actions">
+        <a class="btn btn-outline-secondary" asp-action="Index"><i class="fa-solid fa-arrow-left"></i> Back</a>
+    </div>
+</header>
+
+<div class="form-card" id="supplier-create-form">
+    <form asp-action="Create" method="post" enctype="multipart/form-data">
+        <div asp-validation-summary="ModelOnly" class="alert alert-danger mb-4"></div>
+        <div class="form-grid supplier-form-grid">
+            <div class="form-group @(HasError("Name") ? "form-field-invalid" : "")">
+                <label asp-for="Name">Name</label>
+                <input asp-for="Name" type="text" required class="form-control @(HasError("Name") ? "is-invalid" : "")" />
+                <span asp-validation-for="Name" class="text-danger small"></span>
+            </div>
+            <div class="form-group @(HasError("SupplierCategoryId") ? "form-field-invalid" : "")">
+                <label asp-for="SupplierCategoryId">Category</label>
+                <select asp-for="SupplierCategoryId" asp-items="ViewBag.SupplierCategoryId" required class="form-select select2-enable js-select2 @(HasError("SupplierCategoryId") ? "is-invalid" : "")">
+                    <option value="">-- Select Category --</option>
+                </select>
+                <span asp-validation-for="SupplierCategoryId" class="text-danger small"></span>
+            </div>
+            <div class="form-group @(HasError("ContactEmail") ? "form-field-invalid" : "")">
+                <label asp-for="ContactEmail">Contact Email / Mobile</label>
+                <input asp-for="ContactEmail" type="text" placeholder="Email or cellphone..." class="form-control @(HasError("ContactEmail") ? "is-invalid" : "")" />
+                <span asp-validation-for="ContactEmail" class="text-danger small"></span>
+            </div>
+            <div class="form-group @(HasError("Address") ? "form-field-invalid" : "")">
+                <label asp-for="Address">Office Address</label>
+                <input asp-for="Address" type="text" placeholder="Street, City, Province..." class="form-control @(HasError("Address") ? "is-invalid" : "")" />
+                <span asp-validation-for="Address" class="text-danger small"></span>
+            </div>
+        </div>
+        <div class="form-section doc-upload-section">
+            <h3 class="form-section-title"><i class="fa-solid fa-file-lines"></i> Required Documents</h3>
+            <p class="form-section-desc">Optional at registration. You can also add them later from the supplier details page.</p>
+            <div class="doc-upload-list">
+                <div class="doc-upload-item">
+                    <div class="doc-upload-label"><i class="fa-solid fa-building"></i> Business Permit</div>
+                    <div class="doc-upload-fields">
+                        <div class="doc-upload-file">
+                            <input type="file" name="businessPermitUpload" id="businessPermitUpload" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" class="form-control" />
+                        </div>
+                        <div class="doc-upload-expiry">
+                            <label for="businessPermitExpiryUtc">Expiry</label>
+                            <input type="date" name="businessPermitExpiryUtc" id="businessPermitExpiryUtc" class="form-control" placeholder="" />
+                        </div>
+                    </div>
+                </div>
+                <div class="doc-upload-item">
+                    <div class="doc-upload-label"><i class="fa-solid fa-leaf"></i> Environmental Certificate</div>
+                    <div class="doc-upload-fields">
+                        <div class="doc-upload-file">
+                            <input type="file" name="environmentalCertificateUpload" id="environmentalCertificateUpload" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" class="form-control" />
+                        </div>
+                        <div class="doc-upload-expiry">
+                            <label for="environmentalCertificateExpiryUtc">Expiry</label>
+                            <input type="date" name="environmentalCertificateExpiryUtc" id="environmentalCertificateExpiryUtc" class="form-control" />
+                        </div>
+                    </div>
+                </div>
+                <div class="doc-upload-item">
+                    <div class="doc-upload-label"><i class="fa-solid fa-recycle"></i> Sustainability Declaration</div>
+                    <div class="doc-upload-fields">
+                        <div class="doc-upload-file">
+                            <input type="file" name="sustainabilityDeclarationUpload" id="sustainabilityDeclarationUpload" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" class="form-control" />
+                        </div>
+                        <div class="doc-upload-expiry">
+                            <label for="sustainabilityDeclarationExpiryUtc">Expiry</label>
+                            <input type="date" name="sustainabilityDeclarationExpiryUtc" id="sustainabilityDeclarationExpiryUtc" class="form-control" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <label>Certifications</label>
+        <div class="checkbox-grid certifications-inline">
+            @foreach (var option in (string[])ViewBag.CertificationOptions)
+            {
+                var selected = ((System.Collections.Generic.HashSet<string>)ViewBag.SelectedCertifications).Contains(option);
+                <label class="checkbox-item">
+                    <input type="checkbox" name="certificationSelections" value="@option" checked="@selected" />
+                    <span>@option</span>
+                </label>
+            }
+        </div>
+        <div class="form-actions">
+            <a class="btn btn-outline-secondary" asp-action="Index"><i class="fa-solid fa-xmark"></i> Cancel</a>
+            <button class="btn btn-success" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save</button>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+<script>
+    $(function() {
+        var invalidStyle = { borderColor: '#b63d33', backgroundColor: '#fff8f8', boxShadow: '0 0 0 3px rgba(182,61,51,0.2)' };
+        function highlightInvalidFields() {
+            var $form = $('#supplier-create-form');
+            function highlight($field) {
+                if (!$field.length) return;
+                $field.addClass('is-invalid input-validation-error').css(invalidStyle);
+                $field.closest('.form-group').addClass('form-field-invalid');
+                if ($field.is('select')) {
+                    var $c = $field.next('.select2-container');
+                    if ($c.length) $c.find('.select2-selection--single').addClass('is-invalid').css(invalidStyle);
+                }
+            }
+            $form.find('.field-validation-error').each(function() {
+                var $err = $(this), fieldName = $err.attr('data-valmsg-for');
+                if (!fieldName) {
+                    var $prev = $err.prev();
+                    if ($prev.length && ($prev.is('input') || $prev.is('select') || $prev.is('textarea')))
+                        fieldName = $prev.attr('name');
+                }
+                if (fieldName) highlight($form.find('[name="' + fieldName + '"]').first());
+            });
+            $form.find('input.input-validation-error, select.input-validation-error').each(function() {
+                highlight($(this));
+            });
+        }
+        highlightInvalidFields();
+        setTimeout(highlightInvalidFields, 150);
+        setTimeout(highlightInvalidFields, 400);
+        $('#supplier-create-form form').on('submit', function() {
+            var v = $(this).validate();
+            if (v && !v.form()) setTimeout(highlightInvalidFields, 50);
+        });
+    });
+</script>
+}

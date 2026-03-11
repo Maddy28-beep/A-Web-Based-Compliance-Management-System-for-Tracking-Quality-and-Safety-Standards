@@ -1,0 +1,106 @@
+/* Ensure CAPA Assign/Reassign dropdowns show the dropdown arrow */
+.capa-assign-select,
+.detail-card .form-select[name="assignedTo"] {
+  min-width: 200px;
+  padding-right: 2.25rem;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 16px 12px;
+}
+
+/* CAPA Workflow UI */
+.capa-workflow {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.workflow-stepper {
+  display: flex;
+  justify-content: space-between;
+  position: relative;
+  margin-bottom: 2rem;
+  padding: 0 1rem;
+}
+
+.workflow-stepper::before {
+  content: "";
+  position: absolute;
+  top: 18px;
+  left: 1rem;
+  right: 1rem;
+  height: 2px;
+  background: rgba(193, 164, 123, 0.2);
+  z-index: 1;
+}
+
+.step-item {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+.step-dot {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: white;
+  border: 2px solid #c1a47b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #c1a47b;
+  font-weight: 700;
+  transition: all 0.3s ease;
+}
+
+.step-item.active .step-dot {
+  background: #c1a47b;
+  color: white;
+  box-shadow: 0 0 0 4px rgba(193, 164, 123, 0.2);
+}
+
+.step-item.completed .step-dot {
+  background: #12372a;
+  border-color: #12372a;
+  color: white;
+}
+
+.step-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6b7280;
+}
+
+.step-item.active .step-label {
+  color: #1f1a14;
+}
+
+.workflow-card {
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(193, 164, 123, 0.2);
+  border-radius: 16px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03);
+}
+
+.workflow-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+  color: #12372a;
+}
+
+.workflow-desc {
+  font-size: 0.9rem;
+  color: #6b7280;
+  margin-bottom: 1.25rem;
+}
