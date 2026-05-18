@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <ItemGroup>
     <ProjectReference Include="..\FurniComply.Application\FurniComply.Application.csproj" />
@@ -11,17 +11,34 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="QuestPDF" Version="2024.1.4" />
+    <PackageReference Include="QRCoder" Version="1.6.0" />
+    <PackageReference Include="QuestPDF" Version="2024.3.0" />
+    <PackageReference Include="DotNetEnv" Version="3.0.0" />
   </ItemGroup>
 
   <ItemGroup>
     <Folder Include="wwwroot\logs\stdout\" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include=".env" Link="Configuration\.env" />
+    <None Include="..\..\README.md" Link="Configuration\README.md" />
+    <None Include="..\..\.gitignore" Link="Configuration\.gitignore" />
+    <None Include="..\..\.env.example" Link="Configuration\.env.example" />
+    <None Include="App_Data\FurniComply.local.db" Link="Configuration\FurniComply.local.db" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Scripts\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>furnicomply-web-secrets-2025</UserSecretsId>
   </PropertyGroup>
 
 </Project>

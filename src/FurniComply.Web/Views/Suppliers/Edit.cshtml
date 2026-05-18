@@ -1,10 +1,24 @@
 @model FurniComply.Domain.Entities.Supplier
+@using System.Text.Json
 
 @{
     ViewData["Title"] = "Edit Supplier";
     var canSetApprovalStatus =
         !User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.SuperAdmin) &&
         User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.Admin);
+    var provinces = (IReadOnlyList<string>)(ViewBag.ProvinceOptions ?? Array.Empty<string>());
+    var selectedProvince = (string?)ViewBag.SelectedProvince ?? string.Empty;
+    var selectedBarangay = (string?)ViewBag.SelectedBarangay ?? string.Empty;
+    var streetAddress = (string?)ViewBag.StreetAddress ?? string.Empty;
+    var barangaysByProvinceJson = (string?)ViewBag.BarangayOptionsByProvinceJson ?? "{}";
+    
+    bool HasError(string key)
+    {
+        if (ViewData.ModelState.ContainsKey(key) && ViewData.ModelState[key]!.Errors.Count > 0) return true;
+        foreach (var k in ViewData.ModelState.Keys)
+            if ((k == key || k.EndsWith("." + key)) && ViewData.ModelState[k]!.Errors.Count > 0) return true;
+        return false;
+    }
 }
 
 <header class="page-header">
@@ -22,28 +36,109 @@
     </div>
 </header>
 
-<div class="form-card">
-    <form asp-action="Edit" method="post">
+<div class="form-card supplier-form" id="supplier-edit-form">
+    <form asp-action="Edit" method="post" class="supplier-form-body">
         <input type="hidden" asp-for="Id" />
-        <div class="form-grid supplier-form-grid">
-            <div class="form-group">
-                <label asp-for="Name">Name</label>
-                <input asp-for="Name" />
+        <div asp-validation-summary="ModelOnly" class="alert alert-danger mb-0"></div>
+        <section class="supplier-form-section" aria-labelledby="edit-profile-heading">
+            <header class="supplier-form-section__header">
+                <span class="supplier-form-section__icon" aria-hidden="true"><i class="fa-solid fa-building"></i></span>
+                <div>
+                    <h2 id="edit-profile-heading" class="supplier-form-section__title">Company profile</h2>
+                    <p class="supplier-form-section__desc">Basic identification for the supplier record.</p>
+                </div>
+            </header>
+            <div class="form-grid supplier-form-grid supplier-form-grid--2">
+            <div class="form-group @(HasError("Name") ? "form-field-invalid" : "")">
+                <label asp-for="Name">Supplier name <span class="text-danger">*</span></label>
+                <input asp-for="Name" id="supplierName" required class="form-control @(HasError("Name") ? "is-invalid" : "")" placeholder="e.g. Acme Woodworks Inc." />
+                <span asp-validation-for="Name" class="text-danger small"></span>
             </div>
-            <div class="form-group">
-                <label asp-for="SupplierCategoryId">Category</label>
-                <select asp-for="SupplierCategoryId" asp-items="ViewBag.SupplierCategoryId" class="select2-enable">
-                    <option value="">-- Select Category --</option>
+            <div class="form-group @(HasError("SupplierCategoryId") ? "form-field-invalid" : "")">
+                <label asp-for="SupplierCategoryId">Category <span class="text-danger">*</span></label>
+                <select asp-for="SupplierCategoryId" asp-items="ViewBag.SupplierCategoryId" required class="form-select select2-enable @(HasError("SupplierCategoryId") ? "is-invalid" : "")">
+                    <option value="">Select category</option>
+                </select>
+                <span asp-validation-for="SupplierCategoryId" class="text-danger small"></span>
+            </div>
+            </div>
+        </section>
+
+        <section class="supplier-form-section" aria-labelledby="edit-contact-heading">
+            <header class="supplier-form-section__header">
+                <span class="supplier-form-section__icon" aria-hidden="true"><i class="fa-solid fa-address-book"></i></span>
+                <div>
+                    <h2 id="edit-contact-heading" class="supplier-form-section__title">Contact</h2>
+                    <p class="supplier-form-section__desc">Email and mobile must be unique across all suppliers.</p>
+                </div>
+            </header>
+            <div class="form-grid supplier-form-grid supplier-form-grid--2">
+            <div class="form-group @(HasError("ContactEmail") ? "form-field-invalid" : "")">
+                <label asp-for="ContactEmail">Contact email <span class="text-danger">*</span></label>
+                <input asp-for="ContactEmail" type="email" placeholder="email@example.com" required class="form-control @(HasError("ContactEmail") ? "is-invalid" : "")" />
+                <span asp-validation-for="ContactEmail" class="text-danger small"></span>
+            </div>
+            <div class="form-group @(HasError("PhoneNumber") ? "form-field-invalid" : "")">
+                <label for="phoneNumber">Mobile number <span class="text-danger">*</span></label>
+                    <input type="tel" id="phoneNumber" name="phoneNumber" value="@Model.PhoneNumber" class="form-control @(HasError("PhoneNumber") ? "is-invalid" : "")" placeholder="09XXXXXXXXX" maxlength="11" pattern="09[0-9]{9}" title="Philippine mobile number starting with 09 (11 digits)" required />
+                @if (!HasError("PhoneNumber"))
+                {
+                    <span class="field-help">11-digit Philippine mobile starting with 09.</span>
+                }
+                <span asp-validation-for="PhoneNumber" class="text-danger small"></span>
+            </div>
+            </div>
+        </section>
+
+        <section class="supplier-form-section" aria-labelledby="edit-address-heading">
+            <header class="supplier-form-section__header">
+                <span class="supplier-form-section__icon" aria-hidden="true"><i class="fa-solid fa-location-dot"></i></span>
+                <div>
+                    <h2 id="edit-address-heading" class="supplier-form-section__title">Address</h2>
+                    <p class="supplier-form-section__desc">Philippine address for delivery and compliance records.</p>
+                </div>
+            </header>
+            <div class="form-grid supplier-address-grid">
+            <div class="form-group address-street @(HasError("Address") ? "form-field-invalid" : "")">
+                <label for="StreetAddress">Street address <span class="text-danger">*</span></label>
+                <input id="StreetAddress" name="StreetAddress" value="@streetAddress" placeholder="Building, street, purok..." required class="form-control @(HasError("Address") ? "is-invalid" : "")" />
+            </div>
+            <div class="form-group @(HasError("Address") ? "form-field-invalid" : "")">
+                <label for="Province">Province <span class="text-danger">*</span></label>
+                <select id="Province" name="Province" required class="form-select select2-enable @(HasError("Address") ? "is-invalid" : "")">
+                    <option value="">Select province</option>
+                    @foreach (var province in provinces)
+                    {
+                        if (string.Equals(province, selectedProvince, StringComparison.OrdinalIgnoreCase))
+                        {
+                            <option value="@province" selected>@province</option>
+                        }
+                        else
+                        {
+                            <option value="@province">@province</option>
+                        }
+                    }
                 </select>
             </div>
-            <div class="form-group">
-                <label asp-for="ContactEmail">Contact Email</label>
-                <input asp-for="ContactEmail" />
+            <div class="form-group @(HasError("Address") ? "form-field-invalid" : "")">
+                <label for="Barangay">Barangay <span class="text-danger">*</span></label>
+                <select id="Barangay" name="Barangay" required class="form-select select2-enable @(HasError("Address") ? "is-invalid" : "")" data-selected="@selectedBarangay" disabled>
+                    <option value="">Select barangay</option>
+                </select>
+                <span asp-validation-for="Address" class="text-danger small"></span>
             </div>
-            <div class="form-group">
-                <label asp-for="Address">Office Address</label>
-                <input asp-for="Address" placeholder="Street, City, Province..." />
             </div>
+        </section>
+
+        <section class="supplier-form-section" aria-labelledby="edit-status-heading">
+            <header class="supplier-form-section__header">
+                <span class="supplier-form-section__icon" aria-hidden="true"><i class="fa-solid fa-clipboard-check"></i></span>
+                <div>
+                    <h2 id="edit-status-heading" class="supplier-form-section__title">Status &amp; review</h2>
+                    <p class="supplier-form-section__desc">Operational status, approval workflow, and review dates.</p>
+                </div>
+            </header>
+            <div class="form-grid supplier-form-grid supplier-form-grid--2">
             <div class="form-group">
                 <label asp-for="Status">Status</label>
                 <select asp-for="Status" asp-items="Html.GetEnumSelectList<FurniComply.Domain.Enums.SupplierStatus>()"></select>
@@ -71,9 +166,18 @@
                 <input asp-for="LastReviewUtc" type="date" />
                 <div class="field-help">Tracks last supplier compliance review date.</div>
             </div>
-        </div>
-        <label>Certifications</label>
-        <div class="checkbox-grid">
+            </div>
+        </section>
+
+        <section class="supplier-form-section" aria-labelledby="edit-certs-heading">
+            <header class="supplier-form-section__header">
+                <span class="supplier-form-section__icon" aria-hidden="true"><i class="fa-solid fa-certificate"></i></span>
+                <div>
+                    <h2 id="edit-certs-heading" class="supplier-form-section__title">Certifications</h2>
+                    <p class="supplier-form-section__desc">Select all certifications that apply to this supplier.</p>
+                </div>
+            </header>
+            <div class="checkbox-grid certifications-inline">
             @foreach (var option in (string[])ViewBag.CertificationOptions)
             {
                 var selected = ((System.Collections.Generic.HashSet<string>)ViewBag.SelectedCertifications).Contains(option);
@@ -82,10 +186,211 @@
                     <span>@option</span>
                 </label>
             }
-        </div>
-        <div class="form-actions">
+            </div>
+        </section>
+
+        <div class="form-actions supplier-form-actions">
             <a class="btn btn-outline-secondary" asp-action="Details" asp-route-id="@Model.Id"><i class="fa-solid fa-xmark"></i> Cancel</a>
-            <button class="btn btn-success" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save</button>
+            <button class="btn btn-success" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save changes</button>
         </div>
     </form>
 </div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const barangaysByProvince = @Html.Raw(barangaysByProvinceJson);
+            const provinceSelect = document.getElementById('Province');
+            const barangaySelect = document.getElementById('Barangay');
+            const selectedBarangay = barangaySelect?.dataset.selected || '';
+
+            // Name capitalization function
+            function capitalizeName(input) {
+                if (!input) return input;
+                
+                // Convert to lowercase first, then capitalize first letter of each word
+                // This handles both "john doe" → "John Doe" and "JOHN DOE" → "John Doe"
+                return input.toLowerCase().replace(/\b\w/g, function(char) {
+                    return char.toUpperCase();
+                });
+            }
+
+            // Phone number validation function
+            function validatePhilippinePhoneNumber(phone) {
+                // Remove all non-digit characters
+                const cleanPhone = phone.replace(/\D/g, '');
+                // Check if it's exactly 11 digits and starts with 09
+                return /^09\d{9}$/.test(cleanPhone);
+            }
+
+            // Auto-capitalize supplier name
+            $('#supplierName').on('input', function() {
+                const currentValue = $(this).val();
+                const capitalized = capitalizeName(currentValue);
+                if (currentValue !== capitalized) {
+                    $(this).val(capitalized);
+                }
+            });
+
+            // Phone number validation
+            $('#phoneNumber').on('input', function() {
+                const phone = $(this).val();
+                const isValid = validatePhilippinePhoneNumber(phone);
+                
+                if (phone.length > 0 && !isValid) {
+                    $('#phoneError').show();
+                    $(this).addClass('is-invalid');
+                } else {
+                    $('#phoneError').hide();
+                    $(this).removeClass('is-invalid');
+                }
+            });
+
+            // Prevent non-digit characters in phone field
+            $('#phoneNumber').on('keypress', function(e) {
+                const char = String.fromCharCode(e.which);
+                if (!/[0-9]/.test(char)) {
+                    e.preventDefault();
+                }
+            });
+
+            // Form submission validation
+            $('.form-card form').on('submit', function(e) {
+                // Validate required fields
+                const supplierName = $('#supplierName').val().trim();
+                const supplierCategory = $('#SupplierCategoryId').val();
+                const contactEmail = $('#ContactEmail').val().trim();
+                const phoneNumber = $('#phoneNumber').val().trim();
+                const streetAddress = $('#StreetAddress').val().trim();
+                const province = $('#Province').val();
+                const barangay = $('#Barangay').val();
+                
+                let hasError = false;
+                let errorMessage = '';
+                
+                if (!supplierName) {
+                    hasError = true;
+                    errorMessage += 'Supplier Name is required. ';
+                }
+                
+                if (!supplierCategory) {
+                    hasError = true;
+                    errorMessage += 'Category is required. ';
+                }
+                
+                if (!contactEmail) {
+                    hasError = true;
+                    errorMessage += 'Contact Email is required. ';
+                }
+                
+                if (!phoneNumber) {
+                    hasError = true;
+                    errorMessage += 'Mobile Number is required. ';
+                }
+                
+                if (phoneNumber && !validatePhilippinePhoneNumber(phoneNumber)) {
+                    hasError = true;
+                    errorMessage += 'Please enter a valid 11-digit Philippine mobile number starting with 09. ';
+                }
+                
+                if (!streetAddress) {
+                    hasError = true;
+                    errorMessage += 'Street Address is required. ';
+                }
+                
+                if (!province) {
+                    hasError = true;
+                    errorMessage += 'Province is required. ';
+                }
+                
+                if (!barangay) {
+                    hasError = true;
+                    errorMessage += 'Barangay is required. ';
+                }
+                
+                if (hasError) {
+                    e.preventDefault();
+                    alert('Please fill in all required fields correctly:\n\n' + errorMessage);
+                    return false;
+                }
+            });
+
+            function refreshSearchableSelect(selectElement) {
+                const $select = $(selectElement);
+                if (!$select.length || !$select.data('select2')) return;
+
+                const hasEmptyOption = $select.find('option[value=""]').length > 0;
+                const isRequired = $select.prop('required') === true;
+
+                $select.select2('destroy');
+                $select.select2({
+                    width: '100%',
+                    placeholder: $select.attr('data-placeholder') || 'Search or select...',
+                    allowClear: hasEmptyOption && !isRequired,
+                    dropdownAutoWidth: false,
+                    dropdownParent: $(document.body)
+                });
+            }
+
+            function populateBarangays(province, preferredBarangay) {
+                if (!barangaySelect) return;
+                barangaySelect.disabled = !province;
+
+                barangaySelect.innerHTML = '<option value="">-- Select Barangay --</option>';
+                const barangays = province ? (barangaysByProvince[province] || []) : [];
+                barangays.forEach(function (barangay) {
+                    const option = document.createElement('option');
+                    option.value = barangay;
+                    option.textContent = barangay;
+                    option.selected = barangay === preferredBarangay;
+                    barangaySelect.appendChild(option);
+                });
+
+                refreshSearchableSelect(barangaySelect);
+            }
+
+            if (provinceSelect) {
+                populateBarangays(provinceSelect.value, selectedBarangay);
+                provinceSelect.addEventListener('change', function () {
+                    populateBarangays(provinceSelect.value, '');
+                });
+                $(provinceSelect).on('select2:select select2:clear select2:close', function () {
+                    populateBarangays(provinceSelect.value, '');
+                });
+            }
+
+            var invalidStyle = { borderColor: '#b63d33', backgroundColor: '#fff8f8', boxShadow: '0 0 0 3px rgba(182,61,51,0.2)' };
+            function highlightInvalidFields() {
+                var $form = $('#supplier-edit-form');
+                function highlight($field) {
+                    if (!$field.length) return;
+                    $field.addClass('is-invalid input-validation-error').css(invalidStyle);
+                    $field.closest('.form-group').addClass('form-field-invalid');
+                    if ($field.is('select')) {
+                        var $c = $field.next('.select2-container');
+                        if ($c.length) $c.find('.select2-selection--single').addClass('is-invalid').css(invalidStyle);
+                    }
+                }
+                $form.find('.field-validation-error').each(function() {
+                    var $err = $(this), fieldName = $err.attr('data-valmsg-for');
+                    if (!fieldName) {
+                        var $prev = $err.prev();
+                        if ($prev.length && ($prev.is('input') || $prev.is('select') || $prev.is('textarea')))
+                            fieldName = $prev.attr('name');
+                    }
+                    if (fieldName) highlight($form.find('[name="' + fieldName + '"]').first());
+                });
+                $form.find('input.input-validation-error, select.input-validation-error').each(function() {
+                    highlight($(this));
+                });
+            }
+            highlightInvalidFields();
+            setTimeout(highlightInvalidFields, 150);
+            setTimeout(highlightInvalidFields, 400);
+            $('#supplier-edit-form form').on('submit', function() {
+                var v = $(this).validate();
+                if (v && !v.form()) setTimeout(highlightInvalidFields, 50);
+            });
+        });
+    </script>
+}

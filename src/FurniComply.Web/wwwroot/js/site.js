@@ -275,6 +275,27 @@ document.addEventListener("click", (event) => {
     });
   }
 
+  const reset2faForm = target.closest("form[data-confirm='reset2fa']");
+  if (reset2faForm) {
+    if (target.closest("a") || target.closest("[type='button']")) {
+      return;
+    }
+    event.preventDefault();
+    Swal.fire({
+      title: "Reset two-factor authentication?",
+      text: "The user will be able to log in with password only. They can re-enable 2FA from Profile.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Reset 2FA",
+      cancelButtonText: "Cancel",
+      confirmButtonColor: "#b63d33"
+    }).then((result) => {
+      if (result.isConfirmed) {
+        reset2faForm.submit();
+      }
+    });
+  }
+
   const supplierDocReviewForm = target.closest("form[data-confirm='supplier-doc-review']");
   if (supplierDocReviewForm) {
     if (target.closest("a") || target.closest("[type='button']")) {
@@ -471,6 +492,44 @@ document.addEventListener("DOMContentLoaded", () => {
   const rateEl = document.getElementById("topbar-rate");
   const tempEl = document.getElementById("topbar-temp");
   const cityEl = document.getElementById("topbar-city");
+  const ratePill = document.getElementById("topbar-rate-pill");
+  const weatherPill = document.getElementById("topbar-weather-pill");
+
+  async function refreshTopbarWidgets() {
+    if (!rateEl && !tempEl) return;
+    try {
+      const response = await fetch("/Dashboard/Widgets?baseCurrency=USD", {
+        credentials: "same-origin"
+      });
+      if (!response.ok) return;
+      const data = await response.json();
+
+      const rates = data.exchangeRates?.rates;
+      if (rateEl && Array.isArray(rates)) {
+        const php = rates.find((r) => r.currency === "PHP");
+        if (php && php.rate != null) {
+          rateEl.textContent = Number(php.rate).toFixed(2);
+        }
+      }
+
+      const weather = data.weather;
+      if (weather) {
+        if (tempEl && weather.temperatureC != null) {
+          tempEl.textContent = `${Math.round(weather.temperatureC)}°C`;
+        }
+        if (cityEl && weather.city) {
+          cityEl.textContent = weather.city;
+        }
+      }
+    } catch {
+    }
+  }
+
+  if (rateEl || tempEl) {
+    refreshTopbarWidgets();
+    window.setInterval(refreshTopbarWidgets, 600000);
+  }
+
   const profileMenu = document.querySelector(".profile-menu");
   const profileTrigger = document.querySelector(".profile-trigger");
   const quickLogoutIcon = document.querySelector(".logout-indicator[data-logout-now='true']");
@@ -495,6 +554,24 @@ document.addEventListener("DOMContentLoaded", () => {
       event.stopPropagation();
       quickLogoutForm.submit();
     });
+  }
+
+  const idleLogoutSeconds = parseInt(
+    document.body.getAttribute("data-idle-logout-seconds") || "0",
+    10
+  );
+  if (idleLogoutSeconds > 0 && quickLogoutForm instanceof HTMLFormElement) {
+    let idleTimer;
+    const idleMs = idleLogoutSeconds * 1000;
+    const resetIdleLogout = () => {
+      window.clearTimeout(idleTimer);
+      idleTimer = window.setTimeout(() => quickLogoutForm.submit(), idleMs);
+    };
+    const activityEvents = ["mousemove", "mousedown", "keydown", "touchstart", "scroll", "click"];
+    for (const eventName of activityEvents) {
+      document.addEventListener(eventName, resetIdleLogout, { passive: true });
+    }
+    resetIdleLogout();
   }
 
   const notices = document.querySelectorAll(".notice");
@@ -628,38 +705,4 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  if (!rateEl && !tempEl) return;
-
-  function loadWidgets(attempt) {
-    fetch("/Dashboard/Widgets?baseCurrency=PHP", { credentials: "same-origin" })
-      .then(function (response) {
-        if (!response.ok) throw new Error(response.status);
-        return response.json();
-      })
-      .then(function (data) {
-        if (!data) return;
-
-        if (data.exchangeRates && Array.isArray(data.exchangeRates.rates)) {
-          var usdRate = data.exchangeRates.rates.find(function (r) { return r.currency === "USD"; });
-          if (usdRate && rateEl) {
-            var formatter = new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" });
-            rateEl.textContent = "1 USD = " + formatter.format(1 / usdRate.rate);
-          }
-        }
-
-        if (data.weather && tempEl) {
-          tempEl.textContent = data.weather.temperatureC + "\u00B0C";
-          if (cityEl && data.weather.city) {
-            cityEl.textContent = data.weather.city.replace(" City", "");
-          }
-        }
-      })
-      .catch(function () {
-        if (attempt < 3) {
-          setTimeout(function () { loadWidgets(attempt + 1); }, 2000 * attempt);
-        }
-      });
-  }
-
-  loadWidgets(1);
-});
+  });

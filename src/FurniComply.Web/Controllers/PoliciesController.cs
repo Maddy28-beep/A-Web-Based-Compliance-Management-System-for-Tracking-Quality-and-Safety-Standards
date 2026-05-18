@@ -447,6 +447,7 @@ public class PoliciesController : Controller
             EntityId = entityId,
             Action = action,
             Actor = User.Identity?.Name ?? "system",
+            IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             TimestampUtc = DateTime.UtcNow,
             Details = details
         });

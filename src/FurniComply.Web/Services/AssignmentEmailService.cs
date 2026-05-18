@@ -31,7 +31,7 @@ public class AssignmentEmailService : IAssignmentNotificationService
             var port = _config.GetValue<int>("Mail:SmtpPort", 587);
             var from = _config["Mail:From"] ?? "noreply@furnicomply.local";
             var user = _config["Mail:UserName"];
-            var pass = _config["Mail:Password"];
+            var pass = MailPasswordNormalizer.Normalize(_config["Mail:Password"]);
             var useSsl = _config.GetValue<bool>("Mail:UseSsl", true);
 
             using var client = new SmtpClient(host, port)

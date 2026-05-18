@@ -1,0 +1,98 @@
+@model FurniComply.Web.Models.BackupHistoryViewModel
+@using System.Linq
+
+@{
+    ViewData["Title"] = "Database Backups";
+}
+
+<section class="hero">
+    <div>
+        <p class="eyebrow">Administration</p>
+        <h1>Database Backups</h1>
+        <p class="lede">Create, review, and download database backup files for recovery work.</p>
+        <div class="page-meta" aria-label="Backup context">
+            <span class="meta-pill"><i class="fa-solid fa-database"></i> @Model.BackupModeLabel</span>
+            <span class="meta-pill"><i class="fa-solid fa-folder-tree"></i> @Model.DatabaseLocation</span>
+        </div>
+    </div>
+    <div class="hero-actions">
+        <a class="btn btn-outline-secondary" asp-action="Users"><i class="fa-solid fa-users"></i> User Management</a>
+        <form asp-action="DownloadBackup" method="post" class="d-inline ms-2">
+            @Html.AntiForgeryToken()
+            @if (Model.CanCreateBackup)
+            {
+                <button type="submit" class="btn btn-dark"><i class="fa-solid fa-download me-1"></i> Create New Backup</button>
+            }
+            else
+            {
+                <button type="submit" class="btn btn-dark" disabled><i class="fa-solid fa-download me-1"></i> Create New Backup</button>
+            }
+        </form>
+    </div>
+</section>
+
+@if (!Model.CanCreateBackup)
+{
+    <div class="alert alert-warning">
+        Backup creation is not available for the currently configured database provider.
+    </div>
+}
+
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="alert alert-danger">@TempData["ErrorMessage"]</div>
+}
+
+@if (!Model.Backups.Any())
+{
+    <div class="alert alert-info">No backup files have been created yet.</div>
+}
+else
+{
+    <div class="table-card">
+        <div class="table-card-header">
+            <div>
+                <h3 class="table-section-title">Backup History</h3>
+                <p class="table-card-subtitle">Newest backups are shown first. Keep recent copies and move long-term archives to a safer storage location later.</p>
+            </div>
+        </div>
+        <table class="table data-table backups-table">
+            <thead>
+                <tr>
+                    <th>File Name</th>
+                    <th>Created (UTC)</th>
+                    <th>Size</th>
+                    <th class="table-cell-center" style="width:120px;">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+            @foreach (var backup in Model.Backups)
+            {
+                <tr>
+                    <td>@backup.FileName</td>
+                    <td>@backup.CreatedUtc.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                    <td>@backup.DisplaySize</td>
+                    <td class="actions-cell table-cell-center">
+                        <a class="btn btn-sm btn-outline-primary" asp-action="DownloadBackupFile" asp-route-fileName="@backup.FileName">
+                            <i class="fa-solid fa-file-arrow-down me-1"></i> Download
+                        </a>
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+}
+
+@section Scripts {
+    <script>
+        $(function () {
+            $('.backups-table').DataTable({
+                order: [[1, 'desc']],
+                columnDefs: [
+                    { orderable: false, searchable: false, targets: -1 }
+                ]
+            });
+        });
+    </script>
+}

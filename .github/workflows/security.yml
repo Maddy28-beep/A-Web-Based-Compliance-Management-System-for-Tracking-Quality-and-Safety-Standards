@@ -1,0 +1,46 @@
+name: Security Checks
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+jobs:
+  build-and-scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore FurniComply.sln
+
+      - name: Build
+        run: dotnet build FurniComply.sln --configuration Release --no-restore
+
+      - name: Run security audit script
+        shell: pwsh
+        run: |
+          if (Get-Command pwsh -ErrorAction SilentlyContinue) { pwsh -File ./scripts/Run-SecurityAudit.ps1 }
+          else { powershell -File ./scripts/Run-SecurityAudit.ps1 }
+
+      - name: Upload audit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-audit-report
+          path: security-audit/latest-report.txt
+
+      - name: Check vulnerable packages
+        run: |
+          dotnet list src/FurniComply.Web/FurniComply.Web.csproj package --vulnerable --include-transitive | tee vuln.txt
+          if grep -q 'High' vuln.txt; then
+            echo "::warning::High-severity transitive package advisories found (see security-audit/latest-report.txt). Runtime uses SQLite."
+          fi

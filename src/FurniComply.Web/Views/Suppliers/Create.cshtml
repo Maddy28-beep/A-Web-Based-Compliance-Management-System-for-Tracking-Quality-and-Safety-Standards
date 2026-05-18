@@ -1,4 +1,5 @@
 @model FurniComply.Domain.Entities.Supplier
+@using System.Text.Json
 
 @{
     ViewData["Title"] = "Create Supplier";
@@ -11,104 +12,182 @@
     }
 }
 
+@{
+    var provinces = (IReadOnlyList<string>)(ViewBag.ProvinceOptions ?? Array.Empty<string>());
+    var selectedProvince = (string?)ViewBag.SelectedProvince ?? string.Empty;
+    var selectedBarangay = (string?)ViewBag.SelectedBarangay ?? string.Empty;
+    var streetAddress = (string?)ViewBag.StreetAddress ?? string.Empty;
+    var barangaysByProvinceJson = (string?)ViewBag.BarangayOptionsByProvinceJson ?? "{}";
+}
+
 <header class="page-header">
     <div>
         <p class="eyebrow">Procurement</p>
         <h1>Create Supplier</h1>
         <p class="lede">Register a new supplier profile.</p>
-        <div class="page-meta" aria-label="Page context">
-            <span class="meta-pill"><i class="fa-solid fa-user-plus"></i> New supplier</span>
-            <span class="meta-pill"><i class="fa-solid fa-clock"></i> Dates shown in local time</span>
-        </div>
     </div>
     <div class="page-header-actions">
         <a class="btn btn-outline-secondary" asp-action="Index"><i class="fa-solid fa-arrow-left"></i> Back</a>
     </div>
 </header>
 
-<div class="form-card" id="supplier-create-form">
-    <form asp-action="Create" method="post" enctype="multipart/form-data">
-        <div asp-validation-summary="ModelOnly" class="alert alert-danger mb-4"></div>
-        <div class="form-grid supplier-form-grid">
-            <div class="form-group @(HasError("Name") ? "form-field-invalid" : "")">
-                <label asp-for="Name">Name</label>
-                <input asp-for="Name" type="text" required class="form-control @(HasError("Name") ? "is-invalid" : "")" />
-                <span asp-validation-for="Name" class="text-danger small"></span>
-            </div>
-            <div class="form-group @(HasError("SupplierCategoryId") ? "form-field-invalid" : "")">
-                <label asp-for="SupplierCategoryId">Category</label>
-                <select asp-for="SupplierCategoryId" asp-items="ViewBag.SupplierCategoryId" required class="form-select select2-enable js-select2 @(HasError("SupplierCategoryId") ? "is-invalid" : "")">
-                    <option value="">-- Select Category --</option>
-                </select>
-                <span asp-validation-for="SupplierCategoryId" class="text-danger small"></span>
-            </div>
-            <div class="form-group @(HasError("ContactEmail") ? "form-field-invalid" : "")">
-                <label asp-for="ContactEmail">Contact Email / Mobile</label>
-                <input asp-for="ContactEmail" type="text" placeholder="Email or cellphone..." class="form-control @(HasError("ContactEmail") ? "is-invalid" : "")" />
-                <span asp-validation-for="ContactEmail" class="text-danger small"></span>
-            </div>
-            <div class="form-group @(HasError("Address") ? "form-field-invalid" : "")">
-                <label asp-for="Address">Office Address</label>
-                <input asp-for="Address" type="text" placeholder="Street, City, Province..." class="form-control @(HasError("Address") ? "is-invalid" : "")" />
-                <span asp-validation-for="Address" class="text-danger small"></span>
-            </div>
-        </div>
-        <div class="form-section doc-upload-section">
-            <h3 class="form-section-title"><i class="fa-solid fa-file-lines"></i> Required Documents</h3>
-            <p class="form-section-desc">Optional at registration. You can also add them later from the supplier details page.</p>
-            <div class="doc-upload-list">
-                <div class="doc-upload-item">
-                    <div class="doc-upload-label"><i class="fa-solid fa-building"></i> Business Permit</div>
-                    <div class="doc-upload-fields">
-                        <div class="doc-upload-file">
-                            <input type="file" name="businessPermitUpload" id="businessPermitUpload" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" class="form-control" />
-                        </div>
-                        <div class="doc-upload-expiry">
-                            <label for="businessPermitExpiryUtc">Expiry</label>
-                            <input type="date" name="businessPermitExpiryUtc" id="businessPermitExpiryUtc" class="form-control" placeholder="" />
-                        </div>
-                    </div>
+<div class="form-card supplier-form" id="supplier-create-form">
+    <form asp-action="Create" method="post" enctype="multipart/form-data" class="supplier-form-body">
+        <div asp-validation-summary="ModelOnly" class="alert alert-danger mb-0"></div>
+
+        <section class="supplier-form-section" aria-labelledby="supplier-profile-heading">
+            <header class="supplier-form-section__header">
+                <span class="supplier-form-section__icon" aria-hidden="true"><i class="fa-solid fa-building"></i></span>
+                <div>
+                    <h2 id="supplier-profile-heading" class="supplier-form-section__title">Company profile</h2>
+                    <p class="supplier-form-section__desc">Basic identification for the supplier record.</p>
                 </div>
-                <div class="doc-upload-item">
-                    <div class="doc-upload-label"><i class="fa-solid fa-leaf"></i> Environmental Certificate</div>
-                    <div class="doc-upload-fields">
-                        <div class="doc-upload-file">
-                            <input type="file" name="environmentalCertificateUpload" id="environmentalCertificateUpload" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" class="form-control" />
-                        </div>
-                        <div class="doc-upload-expiry">
-                            <label for="environmentalCertificateExpiryUtc">Expiry</label>
-                            <input type="date" name="environmentalCertificateExpiryUtc" id="environmentalCertificateExpiryUtc" class="form-control" />
-                        </div>
-                    </div>
+            </header>
+            <div class="form-grid supplier-form-grid supplier-form-grid--2">
+                <div class="form-group @(HasError("Name") ? "form-field-invalid" : "")">
+                    <label asp-for="Name">Supplier name <span class="text-danger">*</span></label>
+                    <input asp-for="Name" type="text" id="supplierName" required class="form-control @(HasError("Name") ? "is-invalid" : "")" placeholder="e.g. Acme Woodworks Inc." />
+                    <span asp-validation-for="Name" class="text-danger small"></span>
                 </div>
-                <div class="doc-upload-item">
-                    <div class="doc-upload-label"><i class="fa-solid fa-recycle"></i> Sustainability Declaration</div>
-                    <div class="doc-upload-fields">
-                        <div class="doc-upload-file">
-                            <input type="file" name="sustainabilityDeclarationUpload" id="sustainabilityDeclarationUpload" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" class="form-control" />
-                        </div>
-                        <div class="doc-upload-expiry">
-                            <label for="sustainabilityDeclarationExpiryUtc">Expiry</label>
-                            <input type="date" name="sustainabilityDeclarationExpiryUtc" id="sustainabilityDeclarationExpiryUtc" class="form-control" />
-                        </div>
-                    </div>
+                <div class="form-group @(HasError("SupplierCategoryId") ? "form-field-invalid" : "")">
+                    <label asp-for="SupplierCategoryId">Category <span class="text-danger">*</span></label>
+                    <select asp-for="SupplierCategoryId" asp-items="ViewBag.SupplierCategoryId" required class="form-select select2-enable js-select2 @(HasError("SupplierCategoryId") ? "is-invalid" : "")">
+                        <option value="">Select category</option>
+                    </select>
+                    <span asp-validation-for="SupplierCategoryId" class="text-danger small"></span>
                 </div>
             </div>
-        </div>
-        <label>Certifications</label>
-        <div class="checkbox-grid certifications-inline">
-            @foreach (var option in (string[])ViewBag.CertificationOptions)
-            {
-                var selected = ((System.Collections.Generic.HashSet<string>)ViewBag.SelectedCertifications).Contains(option);
-                <label class="checkbox-item">
-                    <input type="checkbox" name="certificationSelections" value="@option" checked="@selected" />
-                    <span>@option</span>
-                </label>
-            }
-        </div>
-        <div class="form-actions">
+        </section>
+
+        <section class="supplier-form-section" aria-labelledby="supplier-contact-heading">
+            <header class="supplier-form-section__header">
+                <span class="supplier-form-section__icon" aria-hidden="true"><i class="fa-solid fa-address-book"></i></span>
+                <div>
+                    <h2 id="supplier-contact-heading" class="supplier-form-section__title">Contact</h2>
+                    <p class="supplier-form-section__desc">Email and mobile must be unique across all suppliers.</p>
+                </div>
+            </header>
+            <div class="form-grid supplier-form-grid supplier-form-grid--2">
+                <div class="form-group @(HasError("ContactEmail") ? "form-field-invalid" : "")">
+                    <label asp-for="ContactEmail">Contact email <span class="text-danger">*</span></label>
+                    <input asp-for="ContactEmail" type="email" placeholder="name@company.com" required class="form-control @(HasError("ContactEmail") ? "is-invalid" : "")" />
+                    <span asp-validation-for="ContactEmail" class="text-danger small"></span>
+                </div>
+                <div class="form-group @(HasError("PhoneNumber") ? "form-field-invalid" : "")">
+                    <label for="phoneNumber">Mobile number <span class="text-danger">*</span></label>
+                    <input type="tel" id="phoneNumber" name="phoneNumber" class="form-control @(HasError("PhoneNumber") ? "is-invalid" : "")" placeholder="09XXXXXXXXX" maxlength="11" pattern="09[0-9]{9}" title="Philippine mobile number starting with 09 (11 digits)" required />
+                    <span asp-validation-for="PhoneNumber" class="text-danger small"></span>
+                </div>
+            </div>
+        </section>
+
+        <section class="supplier-form-section" aria-labelledby="supplier-address-heading">
+            <header class="supplier-form-section__header">
+                <span class="supplier-form-section__icon" aria-hidden="true"><i class="fa-solid fa-location-dot"></i></span>
+                <div>
+                    <h2 id="supplier-address-heading" class="supplier-form-section__title">Address</h2>
+                    <p class="supplier-form-section__desc">Philippine address for delivery and compliance records.</p>
+                </div>
+            </header>
+            <div class="form-grid supplier-address-grid">
+                <div class="form-group address-street @(HasError("Address") ? "form-field-invalid" : "")">
+                    <label for="StreetAddress">Street address <span class="text-danger">*</span></label>
+                    <input id="StreetAddress" name="StreetAddress" type="text" value="@streetAddress" placeholder="Building, street, purok…" required class="form-control @(HasError("Address") ? "is-invalid" : "")" />
+                </div>
+                <div class="form-group @(HasError("Address") ? "form-field-invalid" : "")">
+                    <label for="Province">Province <span class="text-danger">*</span></label>
+                    <select id="Province" name="Province" required class="form-select select2-enable @(HasError("Address") ? "is-invalid" : "")">
+                        <option value="">Select province</option>
+                        @foreach (var province in provinces)
+                        {
+                            if (string.Equals(province, selectedProvince, StringComparison.OrdinalIgnoreCase))
+                            {
+                                <option value="@province" selected>@province</option>
+                            }
+                            else
+                            {
+                                <option value="@province">@province</option>
+                            }
+                        }
+                    </select>
+                </div>
+                <div class="form-group @(HasError("Address") ? "form-field-invalid" : "")">
+                    <label for="Barangay">Barangay <span class="text-danger">*</span></label>
+                    <select id="Barangay" name="Barangay" required class="form-select select2-enable @(HasError("Address") ? "is-invalid" : "")" data-selected="@selectedBarangay" disabled>
+                        <option value="">Select barangay</option>
+                    </select>
+                    <span asp-validation-for="Address" class="text-danger small"></span>
+                </div>
+            </div>
+        </section>
+
+        <section class="supplier-form-section supplier-form-section--tight doc-upload-section" aria-labelledby="supplier-docs-heading">
+            <h2 id="supplier-docs-heading" class="supplier-form-inline-title">Documents <span class="supplier-form-optional">(optional)</span></h2>
+            <div class="doc-upload-table" role="group" aria-label="Document uploads">
+                <div class="doc-upload-table__head" aria-hidden="true">
+                    <span>Document</span>
+                    <span>File</span>
+                    <span>Expiry date</span>
+                </div>
+                <div class="doc-upload-table__row">
+                    <div class="doc-upload-table__label">
+                        <i class="fa-solid fa-building" aria-hidden="true"></i>
+                        <span>Business permit</span>
+                    </div>
+                    <div class="doc-upload-table__file">
+                        <input type="file" name="businessPermitUpload" id="businessPermitUpload" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" class="form-control form-control-sm" />
+                    </div>
+                    <div class="doc-upload-table__expiry">
+                        <label class="visually-hidden" for="businessPermitExpiryUtc">Business permit expiry</label>
+                        <input type="date" name="businessPermitExpiryUtc" id="businessPermitExpiryUtc" class="form-control form-control-sm" />
+                    </div>
+                </div>
+                <div class="doc-upload-table__row">
+                    <div class="doc-upload-table__label">
+                        <i class="fa-solid fa-leaf" aria-hidden="true"></i>
+                        <span>Environmental certificate</span>
+                    </div>
+                    <div class="doc-upload-table__file">
+                        <input type="file" name="environmentalCertificateUpload" id="environmentalCertificateUpload" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" class="form-control form-control-sm" />
+                    </div>
+                    <div class="doc-upload-table__expiry">
+                        <label class="visually-hidden" for="environmentalCertificateExpiryUtc">Environmental certificate expiry</label>
+                        <input type="date" name="environmentalCertificateExpiryUtc" id="environmentalCertificateExpiryUtc" class="form-control form-control-sm" />
+                    </div>
+                </div>
+                <div class="doc-upload-table__row">
+                    <div class="doc-upload-table__label">
+                        <i class="fa-solid fa-recycle" aria-hidden="true"></i>
+                        <span>Sustainability declaration</span>
+                    </div>
+                    <div class="doc-upload-table__file">
+                        <input type="file" name="sustainabilityDeclarationUpload" id="sustainabilityDeclarationUpload" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" class="form-control form-control-sm" />
+                    </div>
+                    <div class="doc-upload-table__expiry">
+                        <label class="visually-hidden" for="sustainabilityDeclarationExpiryUtc">Sustainability declaration expiry</label>
+                        <input type="date" name="sustainabilityDeclarationExpiryUtc" id="sustainabilityDeclarationExpiryUtc" class="form-control form-control-sm" />
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="supplier-form-section supplier-form-section--tight" aria-labelledby="supplier-certs-heading">
+            <h2 id="supplier-certs-heading" class="supplier-form-inline-title">Certifications</h2>
+            <div class="checkbox-grid certifications-inline">
+                @foreach (var option in (string[])ViewBag.CertificationOptions)
+                {
+                    var selected = ((System.Collections.Generic.HashSet<string>)ViewBag.SelectedCertifications).Contains(option);
+                    <label class="checkbox-item">
+                        <input type="checkbox" name="certificationSelections" value="@option" checked="@selected" />
+                        <span>@option</span>
+                    </label>
+                }
+            </div>
+        </section>
+
+        <div class="form-actions supplier-form-actions">
             <a class="btn btn-outline-secondary" asp-action="Index"><i class="fa-solid fa-xmark"></i> Cancel</a>
-            <button class="btn btn-success" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save</button>
+            <button class="btn btn-success" type="submit"><i class="fa-solid fa-floppy-disk"></i> Save supplier</button>
         </div>
     </form>
 </div>
@@ -116,6 +195,123 @@
 @section Scripts {
 <script>
     $(function() {
+        const barangaysByProvince = @Html.Raw(barangaysByProvinceJson);
+        const provinceSelect = document.getElementById('Province');
+        const barangaySelect = document.getElementById('Barangay');
+        const selectedBarangay = barangaySelect?.dataset.selected || '';
+
+        function capitalizeName(input) {
+            if (!input) return input;
+            return input.toLowerCase().replace(/\b\w/g, function(char) {
+                return char.toUpperCase();
+            });
+        }
+
+        function validatePhilippinePhoneNumber(phone) {
+            const cleanPhone = phone.replace(/\D/g, '');
+            return /^09\d{9}$/.test(cleanPhone);
+        }
+
+        $('#supplierName').on('input', function() {
+            const currentValue = $(this).val();
+            const capitalized = capitalizeName(currentValue);
+            if (currentValue !== capitalized) {
+                $(this).val(capitalized);
+            }
+        });
+
+        $('#phoneNumber').on('input', function() {
+            const phone = $(this).val();
+            const isValid = validatePhilippinePhoneNumber(phone);
+            if (phone.length > 0 && !isValid) {
+                $(this).addClass('is-invalid');
+            } else {
+                $(this).removeClass('is-invalid');
+            }
+        });
+
+        $('#phoneNumber').on('keypress', function(e) {
+            const char = String.fromCharCode(e.which);
+            if (!/[0-9]/.test(char)) {
+                e.preventDefault();
+            }
+        });
+
+        $('#supplier-create-form form').on('submit', function(e) {
+            const supplierName = $('#supplierName').val().trim();
+            const supplierCategory = $('#SupplierCategoryId').val();
+            const contactEmail = $('#ContactEmail').val().trim();
+            const phoneNumber = $('#phoneNumber').val().trim();
+            const streetAddress = $('#StreetAddress').val().trim();
+            const province = $('#Province').val();
+            const barangay = $('#Barangay').val();
+
+            let hasError = false;
+            let errorMessage = '';
+
+            if (!supplierName) { hasError = true; errorMessage += 'Supplier name is required. '; }
+            if (!supplierCategory) { hasError = true; errorMessage += 'Category is required. '; }
+            if (!contactEmail) { hasError = true; errorMessage += 'Contact email is required. '; }
+            if (!phoneNumber) { hasError = true; errorMessage += 'Mobile number is required. '; }
+            if (phoneNumber && !validatePhilippinePhoneNumber(phoneNumber)) {
+                hasError = true;
+                errorMessage += 'Enter a valid 11-digit mobile number starting with 09. ';
+            }
+            if (!streetAddress) { hasError = true; errorMessage += 'Street address is required. '; }
+            if (!province) { hasError = true; errorMessage += 'Province is required. '; }
+            if (!barangay) { hasError = true; errorMessage += 'Barangay is required. '; }
+
+            if (hasError) {
+                e.preventDefault();
+                alert('Please fill in all required fields correctly:\n\n' + errorMessage);
+                return false;
+            }
+        });
+
+        function refreshSearchableSelect(selectElement) {
+            const $select = $(selectElement);
+            if (!$select.length || !$select.data('select2')) return;
+
+            const hasEmptyOption = $select.find('option[value=""]').length > 0;
+            const isRequired = $select.prop('required') === true;
+
+            $select.select2('destroy');
+            $select.select2({
+                width: '100%',
+                placeholder: $select.attr('data-placeholder') || 'Search or select…',
+                allowClear: hasEmptyOption && !isRequired,
+                dropdownAutoWidth: false,
+                dropdownParent: $(document.body)
+            });
+        }
+
+        function populateBarangays(province, preferredBarangay) {
+            if (!barangaySelect) return;
+            barangaySelect.disabled = !province;
+
+            barangaySelect.innerHTML = '<option value="">Select barangay</option>';
+            const barangays = province ? (barangaysByProvince[province] || []) : [];
+            barangays.forEach(function (barangay) {
+                const option = document.createElement('option');
+                option.value = barangay;
+                option.textContent = barangay;
+                option.selected = barangay === preferredBarangay;
+                barangaySelect.appendChild(option);
+            });
+
+            refreshSearchableSelect(barangaySelect);
+        }
+
+        if (provinceSelect) {
+            populateBarangays(provinceSelect.value, selectedBarangay);
+            provinceSelect.addEventListener('change', function () {
+                populateBarangays(provinceSelect.value, '');
+            });
+            $(provinceSelect).on('select2:select select2:clear select2:close', function () {
+                populateBarangays(provinceSelect.value, '');
+            });
+        }
+
         var invalidStyle = { borderColor: '#b63d33', backgroundColor: '#fff8f8', boxShadow: '0 0 0 3px rgba(182,61,51,0.2)' };
         function highlightInvalidFields() {
             var $form = $('#supplier-create-form');

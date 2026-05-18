@@ -9,12 +9,19 @@
 
 <section class="hero">
     <div>
-        <p class="eyebrow">Super Admin</p>
+        <p class="eyebrow">Administration</p>
         <h1>User &amp; Role Management</h1>
-        <p class="lede">Assign roles and manage access across modules.</p>
+        <p class="lede">Assign roles, manage access, and keep privileged accounts out of routine screens.</p>
     </div>
     <div class="hero-actions">
+        <a class="btn btn-outline-primary me-2" asp-action="AccessRequests"><i class="fa-solid fa-inbox me-1"></i> Access Requests @if (ViewBag.PendingAccessRequestCount != null && (int)ViewBag.PendingAccessRequestCount > 0) { <span class="badge bg-warning">@ViewBag.PendingAccessRequestCount</span> }</a>
         <a class="btn btn-success" asp-action="CreateUser"><i class="fa-solid fa-user-plus me-1"></i> Create User</a>
+        <a class="btn btn-outline-secondary ms-2" asp-action="MailDiagnostics" title="SMTP / password reset email"><i class="fa-solid fa-envelope me-1"></i> Mail diagnostics</a>
+        <a class="btn btn-outline-secondary ms-2" asp-action="Backups" title="View database backup history"><i class="fa-solid fa-clock-rotate-left me-1"></i> Backup History</a>
+        <form asp-action="DownloadBackup" method="post" class="d-inline ms-2">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-outline-dark" title="Create and download a database backup"><i class="fa-solid fa-database me-1"></i> Create Backup</button>
+        </form>
     </div>
 </section>
 
@@ -35,6 +42,14 @@
                 <td>@user.Email</td>
                 <td>@string.Join(", ", user.Roles)</td>
                 <td class="actions-cell table-cell-center" style="white-space:nowrap;">
+                    @if (user.TwoFactorEnabled)
+                    {
+                        <form asp-action="ResetTwoFactor" method="post" class="d-inline" data-confirm="reset2fa">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@user.Id" />
+                            <button type="submit" class="icon-action text-info" title="Reset 2FA (for locked-out users)"><i class="fa-solid fa-shield-halved"></i></button>
+                        </form>
+                    }
                     <a class="icon-action text-warning" asp-action="EditRoles" asp-route-id="@user.Id" title="Edit Roles"><i class="fa-solid fa-pen"></i></a>
                     <form asp-action="DeleteUser" method="post" class="d-inline" data-confirm="delete">
                         @Html.AntiForgeryToken()
@@ -65,6 +80,14 @@
                 <td>@user.Email</td>
                 <td>@string.Join(", ", user.Roles)</td>
                 <td class="actions-cell table-cell-center" style="white-space:nowrap;">
+                    @if (user.TwoFactorEnabled)
+                    {
+                        <form asp-action="ResetTwoFactor" method="post" class="d-inline" data-confirm="reset2fa">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@user.Id" />
+                            <button type="submit" class="icon-action text-info" title="Reset 2FA (for locked-out users)"><i class="fa-solid fa-shield-halved"></i></button>
+                        </form>
+                    }
                     <form asp-action="RestoreUser" method="post" class="d-inline" data-confirm="restore">
                         @Html.AntiForgeryToken()
                         <input type="hidden" name="id" value="@user.Id" />
@@ -93,7 +116,7 @@
             <tr>
                 <td>@role.Name</td>
                 <td>@role.UserCount</td>
-                <td class="actions-cell table-cell-center" style="white-space:nowrap;">
+                <td class="actions-cell table-cell-center roles-protected-cell" style="white-space:nowrap;">
                     @if (role.IsProtected)
                     {
                         <span class="badge bg-secondary">Protected</span>

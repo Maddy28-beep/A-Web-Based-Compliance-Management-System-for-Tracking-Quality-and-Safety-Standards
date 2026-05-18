@@ -27,12 +27,19 @@ public sealed class PolicyRetentionBackgroundService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await PurgeAsync(stoppingToken);
-
-        using var timer = new PeriodicTimer(RefreshInterval);
-        while (await timer.WaitForNextTickAsync(stoppingToken))
+        try
         {
             await PurgeAsync(stoppingToken);
+
+            using var timer = new PeriodicTimer(RefreshInterval);
+            while (await timer.WaitForNextTickAsync(stoppingToken))
+            {
+                await PurgeAsync(stoppingToken);
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Normal shutdown when the host stops.
         }
     }
 

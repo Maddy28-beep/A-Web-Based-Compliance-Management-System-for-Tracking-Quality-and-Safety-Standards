@@ -3,12 +3,15 @@
 @using System.Text.RegularExpressions
 
 @{
+    const string FailedLoginIpPrefix = "Failed Login IP:";
+
     ViewData["Title"] = $"{Model.RoleName} Dashboard";
     var localNow = DateTime.Now;
     var isSuperAdminRole = string.Equals(Model.RoleName, "Super Admin", StringComparison.OrdinalIgnoreCase);
     var isProcurementRole = string.Equals(Model.RoleName, "Procurement Officer", StringComparison.OrdinalIgnoreCase);
+    var hasDateFilter = Context.Request.Query.ContainsKey("from") || Context.Request.Query.ContainsKey("to");
 
-    int ParseFirstInteger(string? raw)
+    int ExtractFirstInteger(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw))
         {
@@ -21,46 +24,54 @@
             : 0;
     }
 
-    int LookupNumber(params string[] keywords)
+    int FindNumberByKeywords(params string[] keywords)
     {
-        bool Match(string source) => keywords.Any(k => source.Contains(k, StringComparison.OrdinalIgnoreCase));
+        bool MatchesAnyKeyword(string source) => keywords.Any(keyword => source.Contains(keyword, StringComparison.OrdinalIgnoreCase));
 
         foreach (var metric in Model.Metrics)
         {
-            if (Match(metric.Title))
+            if (MatchesAnyKeyword(metric.Title))
             {
-                return ParseFirstInteger(metric.Value);
+                return ExtractFirstInteger(metric.Value);
             }
         }
 
         foreach (var item in Model.ActionItems)
         {
-            if (Match(item.Title))
+            if (MatchesAnyKeyword(item.Title))
             {
-                return ParseFirstInteger(item.Detail);
+                return ExtractFirstInteger(item.Detail);
             }
         }
 
         foreach (var item in Model.Alerts)
         {
-            if (Match(item.Title))
+            if (MatchesAnyKeyword(item.Title))
             {
-                return ParseFirstInteger(item.Detail);
+                return ExtractFirstInteger(item.Detail);
             }
         }
 
         return 0;
     }
 
-    var seedExpiringCerts = LookupNumber("expiring certs", "expiring");
-    var seedOpenCapa = LookupNumber("open capa", "open capa / findings");
-    var seedDraftOrders = LookupNumber("pending orders", "draft purchase orders");
-    var seedApprovedOrders = LookupNumber("approved orders");
-    var seedDocIssues = LookupNumber("supplier docs", "risk signals", "pending doc overrides", "document issues");
-    var seedCompliantSuppliers = LookupNumber("suppliers compliant", "compliant suppliers");
-    var seedSuspendedSuppliers = LookupNumber("suspended suppliers", "suppliers blocked", "non-compliant suppliers");
-    var seedTotalSuppliers = LookupNumber("total suppliers");
-    var seedActiveSuppliers = LookupNumber("active suppliers") > 0 ? LookupNumber("active suppliers") : (seedTotalSuppliers > 0 ? Math.Max(seedTotalSuppliers - seedSuspendedSuppliers, 0) : 0);
+    var seedExpiringCertifications = FindNumberByKeywords("expiring certs", "expiring");
+    var seedOpenCapa = FindNumberByKeywords("open capa", "open capa / findings");
+    var seedDraftOrders = FindNumberByKeywords("pending orders", "draft purchase orders");
+    var seedApprovedOrders = FindNumberByKeywords("approved orders");
+    var seedDocumentIssues = FindNumberByKeywords("supplier docs", "risk signals", "pending doc overrides", "document issues");
+    var seedCompliantSuppliers = FindNumberByKeywords("suppliers compliant", "compliant suppliers");
+    var seedSuspendedSuppliers = FindNumberByKeywords("suspended suppliers", "suppliers blocked", "non-compliant suppliers");
+    var seedTotalSuppliers = FindNumberByKeywords("total suppliers");
+    var activeSupplierMetric = FindNumberByKeywords("active suppliers");
+    var seedActiveSuppliers = activeSupplierMetric > 0
+        ? activeSupplierMetric
+        : (seedTotalSuppliers > 0 ? Math.Max(seedTotalSuppliers - seedSuspendedSuppliers, 0) : 0);
+    var seedFailedLoginsToday = FindNumberByKeywords("failed logins today");
+    var seedLockedAccountsToday = FindNumberByKeywords("locked accounts today");
+    var topFailedIpAlerts = Model.Alerts
+        .Where(item => item.Title.Contains(FailedLoginIpPrefix, StringComparison.OrdinalIgnoreCase))
+        .ToList();
 }
 
 <div class="erp-cockpit">
@@ -77,10 +88,10 @@
             <span>Last refresh: <strong>@localNow.ToString("MMM dd, yyyy hh:mm tt")</strong></span>
             <span>Source: <strong>Live operational modules</strong></span>
         </div>
-        <div class="dash-date-filter @(Context.Request.Query.ContainsKey("from") || Context.Request.Query.ContainsKey("to") ? "dash-date-filter-active" : "")">
+        <div class="dash-date-filter @(hasDateFilter ? "dash-date-filter-active" : "")">
             <div class="dash-date-filter-header">
                 <span class="dash-date-filter-label"><i class="fa-solid fa-calendar-days"></i> Date range</span>
-                @if (Context.Request.Query.ContainsKey("from") || Context.Request.Query.ContainsKey("to"))
+                @if (hasDateFilter)
                 {
                     <span class="dash-date-filter-badge"><i class="fa-solid fa-check"></i> Filtered</span>
                 }
@@ -99,7 +110,7 @@
                 </div>
                 <div class="dash-date-actions">
                     <button type="submit" class="btn btn-success dash-date-apply"><i class="fa-solid fa-filter"></i> Apply</button>
-                    @if (Context.Request.Query.ContainsKey("from") || Context.Request.Query.ContainsKey("to"))
+                    @if (hasDateFilter)
                     {
                         <a href="@Context.Request.Path" class="btn btn-outline-secondary dash-date-reset"><i class="fa-solid fa-rotate-left"></i> Reset</a>
                     }
@@ -127,9 +138,9 @@
     </div>
 </div>
 <section class="erp-kpi-grid">
-    <a class="erp-kpi-card @(seedExpiringCerts > 0 ? "kpi-soft-orange" : "kpi-soft-slate")" href="/Suppliers/Documents?expiring=1" title="Certifications expiring within 30 days or already overdue">
+    <a class="erp-kpi-card @(seedExpiringCertifications > 0 ? "kpi-soft-orange" : "kpi-soft-slate")" href="/Suppliers/Documents?expiring=1" title="Certifications expiring within 30 days or already overdue">
         <div class="erp-kpi-icon" aria-hidden="true"><i class="fa-solid fa-bell"></i></div>
-        <div class="erp-kpi-value" id="kpiActiveAlerts">@seedExpiringCerts</div>
+        <div class="erp-kpi-value" id="kpiActiveAlerts">@seedExpiringCertifications</div>
         <div class="erp-kpi-label">Expiring Certs &amp; Renewals</div>
     </a>
     <a class="erp-kpi-card kpi-soft-slate" href="/Suppliers/Index">
@@ -154,7 +165,7 @@
     </a>
     <a class="erp-kpi-card kpi-soft-red" href="/Suppliers/Documents">
         <div class="erp-kpi-icon" aria-hidden="true"><i class="fa-solid fa-folder-open"></i></div>
-        <div class="erp-kpi-value" id="kpiSuppliersDocIssues">@seedDocIssues</div>
+        <div class="erp-kpi-value" id="kpiSuppliersDocIssues">@seedDocumentIssues</div>
         <div class="erp-kpi-label">Suppliers With Document Issues</div>
     </a>
     <a class="erp-kpi-card kpi-soft-orange" href="/Capa/Index">
@@ -168,6 +179,79 @@
         <div class="erp-kpi-label">Approved Orders</div>
     </a>
 </section>
+
+@if (isSuperAdminRole)
+{
+    <div class="erp-section-header">
+        <span class="erp-section-badge"><i class="fa-solid fa-user-shield"></i></span>
+        <div>
+            <h2 class="erp-section-title">Security Snapshot</h2>
+            <p class="erp-section-desc">Today’s authentication activity and suspicious access patterns.</p>
+        </div>
+    </div>
+    <section class="erp-kpi-grid">
+        <a class="erp-kpi-card @(seedFailedLoginsToday > 0 ? "kpi-soft-orange" : "kpi-soft-green")" href="/SecurityLogs/Index">
+            <div class="erp-kpi-icon" aria-hidden="true"><i class="fa-solid fa-circle-exclamation"></i></div>
+            <div class="erp-kpi-value">@seedFailedLoginsToday</div>
+            <div class="erp-kpi-label">Failed Logins Today</div>
+        </a>
+        <a class="erp-kpi-card @(seedLockedAccountsToday > 0 ? "kpi-soft-red" : "kpi-soft-green")" href="/SecurityLogs/Index">
+            <div class="erp-kpi-icon" aria-hidden="true"><i class="fa-solid fa-user-lock"></i></div>
+            <div class="erp-kpi-value">@seedLockedAccountsToday</div>
+            <div class="erp-kpi-label">Locked Accounts Today</div>
+        </a>
+    </section>
+
+    <section class="table-card erp-table-card">
+        <div class="table-card-header">
+            <div>
+                <h3 class="table-card-title">Top Failed-Login IPs</h3>
+                <p class="table-card-subtitle">Highest-volume login failure sources recorded today.</p>
+            </div>
+        </div>
+        <div class="detail-table-wrap">
+            <table class="table compact">
+                <thead>
+                    <tr>
+                        <th>IP Address</th>
+                        <th>Detail</th>
+                        <th class="table-cell-center">Severity</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (topFailedIpAlerts.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="3" class="text-center py-3">No failed-login IP spikes recorded today.</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var item in topFailedIpAlerts)
+                        {
+                            var ip = item.Title.Replace(FailedLoginIpPrefix, "", StringComparison.OrdinalIgnoreCase).Trim();
+                            var chipClass = item.Severity == "risk" ? "status-chip risk" : "status-chip warn";
+                            <tr>
+                                <td>
+                                    @if (!string.IsNullOrWhiteSpace(item.Url))
+                                    {
+                                        <a href="@item.Url">@ip</a>
+                                    }
+                                    else
+                                    {
+                                        @ip
+                                    }
+                                </td>
+                                <td>@item.Detail</td>
+                                <td class="table-cell-center"><span class="@chipClass">@item.Severity</span></td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </section>
+}
 
 <div class="erp-section-header">
     <span class="erp-section-badge"><i class="fa-solid fa-chart-line"></i></span>
@@ -650,7 +734,7 @@
                     setValue("kpiActiveSuppliers", supplierData.active || @seedActiveSuppliers);
                     setValue("kpiSuspendedSuppliers", supplierData.suspended || @seedSuspendedSuppliers);
                     setValue("kpiSuppliersCompliant", supplierData.compliantCount || @seedCompliantSuppliers);
-                    setValue("kpiSuppliersDocIssues", supplierData.docIssues || @seedDocIssues);
+            setValue("kpiSuppliersDocIssues", supplierData.docIssues || @seedDocumentIssues);
                     setValue("kpiOpenCapa", capaData.open || @seedOpenCapa);
                     setValue("kpiDraftOrders", ordersData.draft || @seedDraftOrders);
                     setValue("kpiApprovedOrders", ordersData.approved || @seedApprovedOrders);

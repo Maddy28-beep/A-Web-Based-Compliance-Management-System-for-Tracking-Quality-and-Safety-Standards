@@ -1,4 +1,3 @@
-# Build results
 [Dd]ebug/
 [Dd]ebugPublic/
 [Rr]elease/
@@ -15,55 +14,45 @@ bld/
 [Ll]ogs/
 publish/
 
-# Visual Studio
 .vs/
-*.user
-*.userosscache
-*.sln.docstates
-
-# User-specific files
-*.rsuser
-*.suo
-*.user
-*.userosscache
-*.sln.docstates
-
-# Rider
 .idea/
 *.sln.iml
+*.user
+*.userosscache
+*.rsuser
+*.suo
+*.sln.docstates
 
-# NuGet
 *.nupkg
 *.snupkg
 **/[Pp]ackages/*
 !**/[Pp]ackages/build/
-
-# ASP.NET Scaffolding
 ScaffoldingReadMe.txt
 
-# Secrets - NEVER commit these
+Keys/
+**/encryption.key.bin
+**/backup-superadmin-password.bin
 appsettings.json
 appsettings.*.json
 !appsettings.Example.json
-appsettings.Development.json
-appsettings.Production.json
 secrets.json
 *.pfx
 
-# Environment & local overrides
 .env
-.env.*
+.env.local
+.env.*.local
+**/.env
 !.env.example
 
-# OS
 .DS_Store
 Thumbs.db
-
-# Temp / build artifacts
 .tmp-*/
 *.tmp
 *.temp
-
-# Local snapshots / debug
+artifacts/
 live_snapshots/
 live_home_*.html
+src/FurniComply.Web/App_Data/last-password-reset-link.txt
+**/App_Data/*.db
+**/App_Data/*.db-shm
+**/App_Data/*.db-wal

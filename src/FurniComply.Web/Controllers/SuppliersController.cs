@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Security.Claims;
+using System.Text.Json;
 using System.Threading.Tasks;
 using FurniComply.Application.Interfaces;
 using FurniComply.Domain.Entities;
@@ -10,6 +11,7 @@ using FurniComply.Domain.Enums;
 using FurniComply.Infrastructure.Identity;
 using FurniComply.Web.Models;
 using FurniComply.Infrastructure.Persistence;
+using FurniComply.Infrastructure.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -17,6 +19,9 @@ using FurniComply.Web.Services;
 
 namespace FurniComply.Web.Controllers;
 
+/// <summary>
+/// Controller for supplier CRUD, document management, approval workflow, and override handling.
+/// </summary>
 [Authorize(Policy = "Procurement.Read")]
 public class SuppliersController : Controller
 {
@@ -25,24 +30,35 @@ public class SuppliersController : Controller
     private readonly ISupplierPerformanceService _performance;
     private readonly ISupplierComplianceScoreService _complianceScore;
     private readonly ISupplierManagementService _supplierService;
+    private readonly SupplierContactUniquenessService _contactUniqueness;
+
+    /// <summary>
+    /// Helper method to safely get PhoneNumber value from supplier
+    /// </summary>
+    private static string? GetSafePhoneNumber(Supplier? supplier)
+    {
+        return supplier?.PhoneNumber ?? string.Empty;
+    }
 
     public SuppliersController(
         AppDbContext db,
         IWebHostEnvironment environment,
         ISupplierPerformanceService performance,
         ISupplierComplianceScoreService complianceScore,
-        ISupplierManagementService supplierService)
+        ISupplierManagementService supplierService,
+        SupplierContactUniquenessService contactUniqueness)
     {
         _db = db;
         _environment = environment;
         _performance = performance;
         _complianceScore = complianceScore;
         _supplierService = supplierService;
+        _contactUniqueness = contactUniqueness;
     }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
-    [Authorize(Roles = RoleNames.Procurement)]
+    [Authorize(Roles = RoleNames.SuperAdmin + "," + RoleNames.Admin + "," + RoleNames.Procurement)]
     public async Task<IActionResult> EvaluatePerformance(Guid supplierId, string? productName, Guid? productId, int qualityRating, int deliveryRating, decimal defectRate, string remarks)
     {
         await _performance.EvaluatePerformanceAsync(
@@ -61,6 +77,14 @@ public class SuppliersController : Controller
 
     private bool IsProcurementOperator() =>
         User.IsInRole(RoleNames.Procurement);
+
+    /// <summary>Returns Forbid if user is not a procurement operator; otherwise null (caller may proceed).</summary>
+    private IActionResult? EnsureProcurementOperator() =>
+        IsProcurementOperator() ? null : Forbid();
+
+    /// <summary>True when the current user is Admin (and not SuperAdmin) and can set approval status.</summary>
+    private bool IsAdminApprover() =>
+        !User.IsInRole(RoleNames.SuperAdmin) && User.IsInRole(RoleNames.Admin);
 
     public async Task<IActionResult> Index(SupplierApprovalStatus? approvalStatus, SupplierStatus? status)
     {
@@ -85,6 +109,23 @@ public class SuppliersController : Controller
             .ThenByDescending(s => s.CreatedAtUtc)
             .ToListAsync();
 
+        // Handle null values in the view
+        foreach (var supplier in suppliers)
+        {
+            if (supplier.PhoneNumber == null)
+            {
+                supplier.PhoneNumber = string.Empty;
+            }
+            if (supplier.Address == null)
+            {
+                supplier.Address = string.Empty;
+            }
+            if (supplier.Certifications == null)
+            {
+                supplier.Certifications = string.Empty;
+            }
+        }
+
         return View(suppliers);
     }
 
@@ -98,7 +139,26 @@ public class SuppliersController : Controller
             .ThenBy(s => s.Name)
             .ToListAsync();
 
+        // Handle null values in the view
+        foreach (var supplier in suppliers)
+        {
+            if (supplier.PhoneNumber == null)
+            {
+                supplier.PhoneNumber = string.Empty;
+            }
+            if (supplier.Address == null)
+            {
+                supplier.Address = string.Empty;
+            }
+            if (supplier.Certifications == null)
+            {
+                supplier.Certifications = string.Empty;
+            }
+        }
+
         return View(suppliers);
+
+        
     }
 
     public async Task<IActionResult> Documents(Guid? supplierId, SupplierDocumentStatus? status, string? documentType, string? search, bool expiring = false, int page = 1, int pageSize = 10)
@@ -200,6 +260,23 @@ public class SuppliersController : Controller
             .Include(s => s.ComplianceDocuments)
             .Include(s => s.RiskLevel)
             .FirstOrDefaultAsync(s => s.Id == id && !s.IsDeleted);
+
+        // Handle null values to prevent display errors
+        if (supplier != null)
+        {
+            if (supplier.PhoneNumber == null)
+            {
+                supplier.PhoneNumber = string.Empty;
+            }
+            if (supplier.Address == null)
+            {
+                supplier.Address = string.Empty;
+            }
+            if (supplier.Certifications == null)
+            {
+                supplier.Certifications = string.Empty;
+            }
+        }
             
         if (supplier == null)
         {
@@ -335,10 +412,7 @@ public class SuppliersController : Controller
     [Authorize(Policy = "Procurement.Write")]
     public async Task<IActionResult> DocumentCreate(Guid supplierId, string? documentType)
     {
-        if (!IsProcurementOperator())
-        {
-            return Forbid();
-        }
+        if (EnsureProcurementOperator() is { } forbidResult) return forbidResult;
 
         var supplier = await _db.Suppliers.FindAsync(supplierId);
         if (supplier == null)
@@ -359,10 +433,7 @@ public class SuppliersController : Controller
     [Authorize(Policy = "Procurement.Write")]
     public async Task<IActionResult> DocumentCreate(SupplierComplianceDocument document, List<IFormFile>? uploads)
     {
-        if (!IsProcurementOperator())
-        {
-            return Forbid();
-        }
+        if (EnsureProcurementOperator() is { } forbidResult) return forbidResult;
 
         document.Notes ??= string.Empty;
         ModelState.Remove(nameof(SupplierComplianceDocument.FileUrl));
@@ -374,11 +445,7 @@ public class SuppliersController : Controller
             return View(document);
         }
 
-        var files = (uploads ?? new List<IFormFile>())
-            .Where(f => f != null && f.Length > 0)
-            .Take(1)
-            .ToList();
-
+        var files = GetValidUploadFiles(uploads, maxCount: 1);
         if ((uploads?.Count ?? 0) > 1)
         {
             ModelState.AddModelError(string.Empty, "Upload one file per document type to avoid duplicates.");
@@ -412,12 +479,7 @@ public class SuppliersController : Controller
 
             AddAudit(nameof(SupplierComplianceDocument), existingForType.Id, "Edit", $"Updated document {existingForType.DocumentType}.");
             await _db.SaveChangesAsync();
-            await _supplierService.UpdateSupplierRenewalDueUtcAsync(existingForType.SupplierId);
-            
-            // Re-evaluate risk status after document update
-            await _performance.UpdateSupplierRiskStatusAsync(existingForType.SupplierId);
-            
-            await _db.SaveChangesAsync();
+            await AfterDocumentChangeAsync(existingForType.SupplierId);
             TempData["SuccessMessage"] = $"Document '{existingForType.DocumentType}' updated.";
             return RedirectToAction(nameof(Details), new { id = existingForType.SupplierId });
         }
@@ -433,12 +495,7 @@ public class SuppliersController : Controller
         _db.SupplierComplianceDocuments.Add(document);
         AddAudit(nameof(SupplierComplianceDocument), document.Id, "Create", $"Added document {document.DocumentType}.");
         await _db.SaveChangesAsync();
-        await _supplierService.UpdateSupplierRenewalDueUtcAsync(document.SupplierId);
-        
-        // Re-evaluate risk status after document creation
-        await _performance.UpdateSupplierRiskStatusAsync(document.SupplierId);
-        
-        await _db.SaveChangesAsync();
+        await AfterDocumentChangeAsync(document.SupplierId);
         return RedirectToAction(nameof(Details), new { id = document.SupplierId });
     }
 
@@ -454,10 +511,7 @@ public class SuppliersController : Controller
         IFormFile? sustainabilityDeclarationUpload,
         DateTime? sustainabilityDeclarationExpiryUtc)
     {
-        if (!IsProcurementOperator())
-        {
-            return Forbid();
-        }
+        if (EnsureProcurementOperator() is { } forbidResult) return forbidResult;
 
         var supplier = await _db.Suppliers.FindAsync(supplierId);
         if (supplier == null)
@@ -465,10 +519,7 @@ public class SuppliersController : Controller
             return NotFound();
         }
 
-        var touchedCount = 0;
-        touchedCount += await _supplierService.UpsertRequiredDocumentAsync(supplierId, "Business Permit", businessPermitUpload, businessPermitExpiryUtc, _environment.WebRootPath, User.Identity?.Name);
-        touchedCount += await _supplierService.UpsertRequiredDocumentAsync(supplierId, "Environmental Certificate", environmentalCertificateUpload, environmentalCertificateExpiryUtc, _environment.WebRootPath, User.Identity?.Name);
-        touchedCount += await _supplierService.UpsertRequiredDocumentAsync(supplierId, "Sustainability Declaration", sustainabilityDeclarationUpload, sustainabilityDeclarationExpiryUtc, _environment.WebRootPath, User.Identity?.Name);
+        var touchedCount = await UpsertRequiredDocumentsAsync(supplierId, businessPermitUpload, businessPermitExpiryUtc, environmentalCertificateUpload, environmentalCertificateExpiryUtc, sustainabilityDeclarationUpload, sustainabilityDeclarationExpiryUtc);
 
         if (touchedCount == 0)
         {
@@ -478,12 +529,7 @@ public class SuppliersController : Controller
 
         AddAudit(nameof(Supplier), supplierId, "BulkDocumentUpload", $"Uploaded/updated {touchedCount} compliance document(s) for supplier {supplier.Name}.");
         await _db.SaveChangesAsync();
-        await _supplierService.UpdateSupplierRenewalDueUtcAsync(supplierId);
-        
-        // Re-evaluate risk status after bulk document upload
-        await _performance.UpdateSupplierRiskStatusAsync(supplierId);
-        
-        await _db.SaveChangesAsync();
+        await AfterDocumentChangeAsync(supplierId);
         TempData["SuccessMessage"] = "Documents saved.";
         return RedirectToAction(nameof(Details), new { id = supplierId });
     }
@@ -491,10 +537,7 @@ public class SuppliersController : Controller
     [Authorize(Policy = "Procurement.Write")]
     public async Task<IActionResult> DocumentEdit(Guid id)
     {
-        if (!IsProcurementOperator())
-        {
-            return Forbid();
-        }
+        if (EnsureProcurementOperator() is { } forbidResult) return forbidResult;
 
         var document = await _db.SupplierComplianceDocuments.FindAsync(id);
         if (document == null)
@@ -511,10 +554,7 @@ public class SuppliersController : Controller
     [Authorize(Policy = "Procurement.Write")]
     public async Task<IActionResult> DocumentEdit(Guid id, SupplierComplianceDocument document, List<IFormFile>? uploads)
     {
-        if (!IsProcurementOperator())
-        {
-            return Forbid();
-        }
+        if (EnsureProcurementOperator() is { } forbidResult) return forbidResult;
 
         if (id != document.Id)
         {
@@ -550,11 +590,7 @@ public class SuppliersController : Controller
             return View(document);
         }
 
-        var files = (uploads ?? new List<IFormFile>())
-            .Where(f => f != null && f.Length > 0)
-            .Take(1)
-            .ToList();
-
+        var files = GetValidUploadFiles(uploads, maxCount: 1);
         if ((uploads?.Count ?? 0) > 1)
         {
             ModelState.AddModelError(string.Empty, "Upload one file per document type to avoid duplicates.");
@@ -576,22 +612,14 @@ public class SuppliersController : Controller
         AddAudit(nameof(SupplierComplianceDocument), existing.Id, "Edit", $"Updated document {existing.DocumentType}.");
 
         await _db.SaveChangesAsync();
-        await _supplierService.UpdateSupplierRenewalDueUtcAsync(existing.SupplierId);
-        
-        // Re-evaluate risk status after document edit
-        await _performance.UpdateSupplierRiskStatusAsync(existing.SupplierId);
-        
-        await _db.SaveChangesAsync();
+        await AfterDocumentChangeAsync(existing.SupplierId);
         return RedirectToAction(nameof(Details), new { id = existing.SupplierId });
     }
 
     [Authorize(Policy = "Procurement.Write")]
     public async Task<IActionResult> DocumentDelete(Guid id)
     {
-        if (!IsProcurementOperator())
-        {
-            return Forbid();
-        }
+        if (EnsureProcurementOperator() is { } forbidResult) return forbidResult;
 
         var document = await _db.SupplierComplianceDocuments
             .Include(d => d.Supplier)
@@ -609,10 +637,7 @@ public class SuppliersController : Controller
     [Authorize(Policy = "Procurement.Write")]
     public async Task<IActionResult> DocumentDeleteConfirmed(Guid id)
     {
-        if (!IsProcurementOperator())
-        {
-            return Forbid();
-        }
+        if (EnsureProcurementOperator() is { } forbidResult) return forbidResult;
 
         var document = await _db.SupplierComplianceDocuments.FindAsync(id);
         if (document != null)
@@ -623,11 +648,7 @@ public class SuppliersController : Controller
             document.UpdatedAtUtc = DateTime.UtcNow;
             AddAudit(nameof(SupplierComplianceDocument), document.Id, "Archive", $"Archived document {document.DocumentType}.");
             await _db.SaveChangesAsync();
-            
-            // Re-evaluate risk status after document archival
-            await _performance.UpdateSupplierRiskStatusAsync(supplierId);
-            
-            await _db.SaveChangesAsync();
+            await AfterDocumentChangeAsync(supplierId);
             TempData["SuccessMessage"] = $"Document '{document.DocumentType}' archived.";
             return RedirectToAction(nameof(Details), new { id = supplierId });
         }
@@ -641,10 +662,7 @@ public class SuppliersController : Controller
     [Authorize(Policy = "Procurement.Write")]
     public async Task<IActionResult> DocumentRestore(Guid id)
     {
-        if (!IsProcurementOperator())
-        {
-            return Forbid();
-        }
+        if (EnsureProcurementOperator() is { } forbidResult) return forbidResult;
 
         var document = await _db.SupplierComplianceDocuments
             .IgnoreQueryFilters()
@@ -667,13 +685,11 @@ public class SuppliersController : Controller
     [Authorize(Policy = "Procurement.Write")]
     public IActionResult Create()
     {
-        if (!IsProcurementOperator())
-        {
-            return Forbid();
-        }
+        if (EnsureProcurementOperator() is { } forbidResult) return forbidResult;
 
         PopulateCategories();
         PopulateCertificationOptions(Array.Empty<string>());
+        PopulateAddressOptions(string.Empty, string.Empty, string.Empty);
         return View(new Supplier());
     }
 
@@ -683,6 +699,7 @@ public class SuppliersController : Controller
     public async Task<IActionResult> Create(
         Supplier supplier,
         string[] certificationSelections,
+        string? phoneNumber = null,
         bool submitAsPending = false,
         IFormFile? businessPermitUpload = null,
         DateTime? businessPermitExpiryUtc = null,
@@ -691,21 +708,48 @@ public class SuppliersController : Controller
         IFormFile? sustainabilityDeclarationUpload = null,
         DateTime? sustainabilityDeclarationExpiryUtc = null)
     {
-        if (!IsProcurementOperator())
+        if (EnsureProcurementOperator() is { } forbidResult) return forbidResult;
+
+        // Server-side validation for phone number
+        if (string.IsNullOrWhiteSpace(phoneNumber))
         {
-            return Forbid();
+            ModelState.AddModelError("PhoneNumber", "Mobile number is required.");
+        }
+        else
+        {
+            var cleanPhone = System.Text.RegularExpressions.Regex.Replace(phoneNumber, @"\D", "");
+            if (!System.Text.RegularExpressions.Regex.IsMatch(cleanPhone, @"^09\d{9}$"))
+            {
+                ModelState.AddModelError("PhoneNumber", "Please enter a valid 11-digit Philippine mobile number starting with 09.");
+            }
+            else
+            {
+                supplier.PhoneNumber = cleanPhone;
+            }
         }
 
+        // Server-side name capitalization
+        if (!string.IsNullOrWhiteSpace(supplier.Name))
+        {
+            supplier.Name = System.Text.RegularExpressions.Regex.Replace(supplier.Name.ToLower(), @"\b\w", m => m.Value.ToUpper());
+        }
+
+        // Auto-generate Code from Name (first 3 letters + cryptographically secure random number)
+        if (string.IsNullOrWhiteSpace(supplier.Code))
+        {
+            var namePrefix = new string(supplier.Name.Take(3).ToArray()).ToUpper();
+            var randomSuffix = System.Security.Cryptography.RandomNumberGenerator.GetInt32(100, 999);
+            supplier.Code = $"{namePrefix}{randomSuffix}";
+        }
+
+        ApplyStructuredAddress(supplier);
         supplier.Certifications = NormalizeCertifications(supplier.Certifications, certificationSelections);
         supplier.Status = SupplierStatus.Active;
         supplier.Rating = 0;
         supplier.PerformanceScore = 0;
         supplier.RenewalDueUtc = null;
         supplier.LastReviewUtc = null;
-        var isApprover =
-            !User.IsInRole(RoleNames.SuperAdmin) &&
-            User.IsInRole(RoleNames.Admin);
-        var shouldBePending = !isApprover || submitAsPending;
+        var shouldBePending = !IsAdminApprover() || submitAsPending;
         supplier.ApprovalStatus = shouldBePending ? SupplierApprovalStatus.Pending : SupplierApprovalStatus.Approved;
         supplier.ApprovedBy = shouldBePending ? null : (User.Identity?.Name ?? RoleNames.Admin);
         supplier.ApprovedOnUtc = shouldBePending ? null : DateTime.UtcNow;
@@ -714,51 +758,39 @@ public class SuppliersController : Controller
         {
             PopulateCategories();
             PopulateCertificationOptions(certificationSelections);
+            PopulateAddressOptionsFromRequest();
             TempData["ErrorMessage"] = "Please review highlighted fields and submit again.";
             return View(supplier);
         }
 
-        _db.Suppliers.Add(supplier);
-
-        var defaultDocuments = new List<SupplierComplianceDocument>
+        var contactConflict = await _contactUniqueness.FindSupplierContactConflictAsync(
+            supplier.ContactEmail,
+            supplier.PhoneNumber);
+        if (contactConflict != null)
         {
-            new()
-            {
-                SupplierId = supplier.Id,
-                DocumentType = "Business Permit",
-                DocumentStatus = SupplierDocumentStatus.Missing,
-                Notes = "Upload required."
-            },
-            new()
-            {
-                SupplierId = supplier.Id,
-                DocumentType = "Environmental Certificate",
-                DocumentStatus = SupplierDocumentStatus.Missing,
-                Notes = "Upload required."
-            },
-            new()
-            {
-                SupplierId = supplier.Id,
-                DocumentType = "Sustainability Declaration",
-                DocumentStatus = SupplierDocumentStatus.Missing,
-                Notes = "Upload required."
-            }
-        };
+            ModelState.AddModelError(
+                contactConflict.FieldName,
+                $"A supplier with this {contactConflict.ContactTypeLabel} already exists: {contactConflict.ExistingSupplierName}. Please use a different {contactConflict.ContactTypeLabel}.");
 
-        _db.SupplierComplianceDocuments.AddRange(defaultDocuments);
+            PopulateCategories();
+            PopulateCertificationOptions(certificationSelections);
+            PopulateAddressOptionsFromRequest();
+            TempData["ErrorMessage"] = contactConflict.FieldName == "ContactEmail"
+                ? "A supplier with this email already exists."
+                : "A supplier with this phone number already exists.";
+            return View(supplier);
+        }
+
+        _db.Suppliers.Add(supplier);
+        _db.SupplierComplianceDocuments.AddRange(GetDefaultRequiredDocuments(supplier.Id));
         AddAudit(nameof(Supplier), supplier.Id, "Create", $"Created supplier {supplier.Name}.");
         await _db.SaveChangesAsync();
 
-        var touchedCount = 0;
-        touchedCount += await _supplierService.UpsertRequiredDocumentAsync(supplier.Id, "Business Permit", businessPermitUpload, businessPermitExpiryUtc, _environment.WebRootPath, User.Identity?.Name);
-        touchedCount += await _supplierService.UpsertRequiredDocumentAsync(supplier.Id, "Environmental Certificate", environmentalCertificateUpload, environmentalCertificateExpiryUtc, _environment.WebRootPath, User.Identity?.Name);
-        touchedCount += await _supplierService.UpsertRequiredDocumentAsync(supplier.Id, "Sustainability Declaration", sustainabilityDeclarationUpload, sustainabilityDeclarationExpiryUtc, _environment.WebRootPath, User.Identity?.Name);
+        var touchedCount = await UpsertRequiredDocumentsAsync(supplier.Id, businessPermitUpload, businessPermitExpiryUtc, environmentalCertificateUpload, environmentalCertificateExpiryUtc, sustainabilityDeclarationUpload, sustainabilityDeclarationExpiryUtc);
         if (touchedCount > 0)
         {
             await _db.SaveChangesAsync();
-            await _supplierService.UpdateSupplierRenewalDueUtcAsync(supplier.Id);
-            await _performance.UpdateSupplierRiskStatusAsync(supplier.Id);
-            await _db.SaveChangesAsync();
+            await AfterDocumentChangeAsync(supplier.Id);
         }
 
         TempData["SuccessMessage"] = $"Supplier '{supplier.Name}' created." + (touchedCount > 0 ? $" {touchedCount} document(s) uploaded." : "");
@@ -768,10 +800,7 @@ public class SuppliersController : Controller
     [Authorize(Policy = "Procurement.Write")]
     public async Task<IActionResult> Edit(Guid id)
     {
-        if (!IsProcurementOperator())
-        {
-            return Forbid();
-        }
+        if (EnsureProcurementOperator() is { } forbidResult) return forbidResult;
 
         var supplier = await _db.Suppliers.FindAsync(id);
         if (supplier == null)
@@ -781,30 +810,55 @@ public class SuppliersController : Controller
 
         PopulateCategories();
         PopulateCertificationOptions(ParseCertifications(supplier.Certifications));
+        var parsedAddress = PhilippineAddressOptions.ParseAddress(supplier.Address);
+        PopulateAddressOptions(parsedAddress.StreetAddress, parsedAddress.Barangay, parsedAddress.Province);
         return View(supplier);
     }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
     [Authorize(Policy = "Procurement.Write")]
-    public async Task<IActionResult> Edit(Guid id, Supplier supplier, string[] certificationSelections)
+    public async Task<IActionResult> Edit(Guid id, Supplier supplier, string[] certificationSelections, string? phoneNumber = null)
     {
-        if (!IsProcurementOperator())
-        {
-            return Forbid();
-        }
+        if (EnsureProcurementOperator() is { } forbidResult) return forbidResult;
 
         if (id != supplier.Id)
         {
             return BadRequest();
         }
 
+        // Server-side validation for phone number
+        if (string.IsNullOrWhiteSpace(phoneNumber))
+        {
+            ModelState.AddModelError("PhoneNumber", "Mobile number is required.");
+        }
+        else
+        {
+            var cleanPhone = System.Text.RegularExpressions.Regex.Replace(phoneNumber, @"\D", "");
+            if (!System.Text.RegularExpressions.Regex.IsMatch(cleanPhone, @"^09\d{9}$"))
+            {
+                ModelState.AddModelError("PhoneNumber", "Please enter a valid 11-digit Philippine mobile number starting with 09.");
+            }
+            else
+            {
+                supplier.PhoneNumber = cleanPhone;
+            }
+        }
+
+        // Server-side name capitalization
+        if (!string.IsNullOrWhiteSpace(supplier.Name))
+        {
+            supplier.Name = System.Text.RegularExpressions.Regex.Replace(supplier.Name.ToLower(), @"\b\w", m => m.Value.ToUpper());
+        }
+
+        ApplyStructuredAddress(supplier);
         supplier.Certifications = NormalizeCertifications(supplier.Certifications, certificationSelections);
 
         if (!ModelState.IsValid)
         {
             PopulateCategories();
             PopulateCertificationOptions(certificationSelections);
+            PopulateAddressOptionsFromRequest();
             TempData["ErrorMessage"] = "Please review highlighted fields and submit again.";
             return View(supplier);
         }
@@ -820,21 +874,39 @@ public class SuppliersController : Controller
             ModelState.AddModelError(nameof(Supplier.Status), "Cannot put a supplier On Hold while approval is still pending.");
             PopulateCategories();
             PopulateCertificationOptions(certificationSelections);
+            PopulateAddressOptionsFromRequest();
+            return View(supplier);
+        }
+
+        var editContactConflict = await _contactUniqueness.FindSupplierContactConflictAsync(
+            supplier.ContactEmail,
+            supplier.PhoneNumber,
+            id);
+        if (editContactConflict != null)
+        {
+            ModelState.AddModelError(
+                editContactConflict.FieldName,
+                $"A supplier with this {editContactConflict.ContactTypeLabel} already exists: {editContactConflict.ExistingSupplierName}. Please use a different {editContactConflict.ContactTypeLabel}.");
+
+            PopulateCategories();
+            PopulateCertificationOptions(certificationSelections);
+            PopulateAddressOptionsFromRequest();
+            TempData["ErrorMessage"] = editContactConflict.FieldName == "ContactEmail"
+                ? "A supplier with this email already exists."
+                : "A supplier with this phone number already exists.";
             return View(supplier);
         }
 
         existing.Name = supplier.Name;
         existing.SupplierCategoryId = supplier.SupplierCategoryId;
         existing.ContactEmail = supplier.ContactEmail;
+        existing.PhoneNumber = supplier.PhoneNumber;
         existing.Address = supplier.Address;
         existing.Status = supplier.Status;
         existing.Certifications = supplier.Certifications;
         existing.RenewalDueUtc = supplier.RenewalDueUtc;
         existing.LastReviewUtc = supplier.LastReviewUtc;
-        var canSetApprovalStatus =
-            !User.IsInRole(RoleNames.SuperAdmin) &&
-            User.IsInRole(RoleNames.Admin);
-        if (canSetApprovalStatus)
+        if (IsAdminApprover())
         {
             var previousStatus = existing.ApprovalStatus;
             existing.ApprovalStatus = supplier.ApprovalStatus;
@@ -930,12 +1002,13 @@ public class SuppliersController : Controller
         var document = await _db.SupplierComplianceDocuments
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(d => d.Id == id);
-        if (document == null || !IsLocalUploadUrl(document.FileUrl))
+        if (document == null || !TryResolveLocalUploadPath(document.FileUrl, out var fullPath))
         {
             return NotFound();
         }
 
-        return Redirect(document.FileUrl!);
+        var fileName = Path.GetFileName(fullPath);
+        return PhysicalFile(fullPath, GetUploadContentType(fileName));
     }
 
     public async Task<IActionResult> DocumentDownload(Guid id)
@@ -943,14 +1016,7 @@ public class SuppliersController : Controller
         var document = await _db.SupplierComplianceDocuments
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(d => d.Id == id);
-        if (document == null || !IsLocalUploadUrl(document.FileUrl))
-        {
-            return NotFound();
-        }
-
-        var relativePath = document.FileUrl!.TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
-        var fullPath = Path.Combine(_environment.WebRootPath, relativePath);
-        if (!System.IO.File.Exists(fullPath))
+        if (document == null || !TryResolveLocalUploadPath(document.FileUrl, out var fullPath))
         {
             return NotFound();
         }
@@ -986,12 +1052,7 @@ public class SuppliersController : Controller
         }
         AddAudit(nameof(SupplierComplianceDocument), document.Id, "Review", $"Reviewed supplier document {document.DocumentType}.");
         await _db.SaveChangesAsync();
-        await _supplierService.UpdateSupplierRenewalDueUtcAsync(document.SupplierId);
-        
-        // Re-evaluate risk status after document review
-        await _performance.UpdateSupplierRiskStatusAsync(document.SupplierId);
-        
-        await _db.SaveChangesAsync();
+        await AfterDocumentChangeAsync(document.SupplierId);
 
         TempData["SuccessMessage"] = $"Document '{document.DocumentType}' reviewed.";
         return RedirectToAction(nameof(Documents), new { supplierId = document.SupplierId });
@@ -1020,10 +1081,8 @@ public class SuppliersController : Controller
             document.Supplier.LastReviewUtc = DateTime.UtcNow;
         }
         AddAudit(nameof(SupplierComplianceDocument), document.Id, "Flag", $"Flagged supplier document {document.DocumentType} for follow-up.");
-        
-        // Re-evaluate risk status after document flag
+        // Re-evaluate risk status after document flag (no renewal update; only status change)
         await _performance.UpdateSupplierRiskStatusAsync(document.SupplierId);
-        
         await _db.SaveChangesAsync();
 
         TempData["ErrorMessage"] = $"Document '{document.DocumentType}' flagged.";
@@ -1033,10 +1092,7 @@ public class SuppliersController : Controller
     [Authorize(Policy = "Procurement.Write")]
     public async Task<IActionResult> Delete(Guid id)
     {
-        if (!IsProcurementOperator())
-        {
-            return Forbid();
-        }
+        if (EnsureProcurementOperator() is { } forbidResult) return forbidResult;
 
         var supplier = await _db.Suppliers
             .Include(s => s.SupplierCategory)
@@ -1054,10 +1110,7 @@ public class SuppliersController : Controller
     [Authorize(Policy = "Procurement.Write")]
     public async Task<IActionResult> DeleteConfirmed(Guid id)
     {
-        if (!IsProcurementOperator())
-        {
-            return Forbid();
-        }
+        if (EnsureProcurementOperator() is { } forbidResult) return forbidResult;
 
         var supplier = await _db.Suppliers.FindAsync(id);
         if (supplier != null)
@@ -1082,10 +1135,7 @@ public class SuppliersController : Controller
     [Authorize(Policy = "Procurement.Write")]
     public async Task<IActionResult> Restore(Guid id)
     {
-        if (!IsProcurementOperator())
-        {
-            return Forbid();
-        }
+        if (EnsureProcurementOperator() is { } forbidResult) return forbidResult;
 
         var supplier = await _db.Suppliers
             .IgnoreQueryFilters()
@@ -1192,6 +1242,53 @@ public class SuppliersController : Controller
         return RedirectToAction(nameof(Details), new { id = supplier.Id });
     }
 
+    /// <summary>Returns non-null, non-empty uploads up to maxCount.</summary>
+    private static List<IFormFile> GetValidUploadFiles(List<IFormFile>? uploads, int maxCount)
+    {
+        if (uploads == null) return new List<IFormFile>();
+        return uploads.Where(f => f != null && f.Length > 0).Take(maxCount).ToList();
+    }
+
+    /// <summary>Updates supplier renewal due and risk status after document changes; calls SaveChangesAsync.</summary>
+    private async Task AfterDocumentChangeAsync(Guid supplierId)
+    {
+        await _supplierService.UpdateSupplierRenewalDueUtcAsync(supplierId);
+        await _performance.UpdateSupplierRiskStatusAsync(supplierId);
+        await _db.SaveChangesAsync();
+    }
+
+    /// <summary>Upserts Business Permit, Environmental Certificate, and Sustainability Declaration; returns total documents touched.</summary>
+    private async Task<int> UpsertRequiredDocumentsAsync(
+        Guid supplierId,
+        IFormFile? businessPermitUpload,
+        DateTime? businessPermitExpiryUtc,
+        IFormFile? environmentalCertificateUpload,
+        DateTime? environmentalCertificateExpiryUtc,
+        IFormFile? sustainabilityDeclarationUpload,
+        DateTime? sustainabilityDeclarationExpiryUtc)
+    {
+        var actorName = User.Identity?.Name ?? "system";
+        var webRoot = _environment.WebRootPath;
+        var touched = 0;
+        touched += await _supplierService.UpsertRequiredDocumentAsync(supplierId, "Business Permit", businessPermitUpload, businessPermitExpiryUtc, webRoot, actorName);
+        touched += await _supplierService.UpsertRequiredDocumentAsync(supplierId, "Environmental Certificate", environmentalCertificateUpload, environmentalCertificateExpiryUtc, webRoot, actorName);
+        touched += await _supplierService.UpsertRequiredDocumentAsync(supplierId, "Sustainability Declaration", sustainabilityDeclarationUpload, sustainabilityDeclarationExpiryUtc, webRoot, actorName);
+        return touched;
+    }
+
+    /// <summary>Returns the default required compliance documents (Business Permit, Environmental Certificate, Sustainability Declaration) for a new supplier.</summary>
+    private static List<SupplierComplianceDocument> GetDefaultRequiredDocuments(Guid supplierId)
+    {
+        var types = new[] { "Business Permit", "Environmental Certificate", "Sustainability Declaration" };
+        return types.Select(t => new SupplierComplianceDocument
+        {
+            SupplierId = supplierId,
+            DocumentType = t,
+            DocumentStatus = SupplierDocumentStatus.Missing,
+            Notes = "Upload required."
+        }).ToList();
+    }
+
     private void PopulateCategories()
     {
         var categories = _db.SupplierCategories
@@ -1216,6 +1313,43 @@ public class SuppliersController : Controller
         ViewBag.SelectedCertifications = new HashSet<string>(selected, StringComparer.OrdinalIgnoreCase);
     }
 
+    private void ApplyStructuredAddress(Supplier supplier)
+    {
+        var streetAddress = Request.Form["StreetAddress"].ToString();
+        var province = Request.Form["Province"].ToString();
+        var barangay = Request.Form["Barangay"].ToString();
+
+        if (!string.IsNullOrWhiteSpace(barangay))
+        {
+            if (string.IsNullOrWhiteSpace(province))
+            {
+                ModelState.AddModelError(nameof(Supplier.Address), "Select a province before choosing a barangay.");
+            }
+            else if (!PhilippineAddressOptions.BarangaysByProvince.TryGetValue(province, out var allowedBarangays) ||
+                     !allowedBarangays.Contains(barangay, StringComparer.OrdinalIgnoreCase))
+            {
+                ModelState.AddModelError(nameof(Supplier.Address), "Select a barangay that matches the selected province.");
+            }
+        }
+
+        supplier.Address = PhilippineAddressOptions.ComposeAddress(streetAddress, barangay, province);
+    }
+
+    private void PopulateAddressOptionsFromRequest() =>
+        PopulateAddressOptions(
+            Request.Form["StreetAddress"].ToString(),
+            Request.Form["Barangay"].ToString(),
+            Request.Form["Province"].ToString());
+
+    private void PopulateAddressOptions(string streetAddress, string barangay, string province)
+    {
+        ViewBag.StreetAddress = streetAddress;
+        ViewBag.SelectedBarangay = barangay;
+        ViewBag.SelectedProvince = province;
+        ViewBag.ProvinceOptions = PhilippineAddressOptions.Provinces;
+        ViewBag.BarangayOptionsByProvinceJson = JsonSerializer.Serialize(PhilippineAddressOptions.BarangaysByProvince);
+    }
+
     private void PopulateDocumentTypes(string? selectedDocumentType)
     {
         var options = new[]
@@ -1232,19 +1366,41 @@ public class SuppliersController : Controller
         !string.IsNullOrWhiteSpace(fileUrl) &&
         fileUrl.StartsWith("/uploads/", StringComparison.OrdinalIgnoreCase);
 
-    private bool HasStoredUpload(SupplierComplianceDocument document)
+    private bool TryResolveLocalUploadPath(string? fileUrl, out string fullPath)
     {
-        if (!IsLocalUploadUrl(document.FileUrl))
+        fullPath = string.Empty;
+        if (!IsLocalUploadUrl(fileUrl))
         {
             return false;
         }
 
-        var relativePath = document.FileUrl!.TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
-        var fullPath = Path.Combine(_environment.WebRootPath, relativePath);
+        var relativePath = fileUrl!.TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
+        fullPath = Path.GetFullPath(Path.Combine(_environment.WebRootPath, relativePath));
+        var uploadsRoot = Path.GetFullPath(Path.Combine(_environment.WebRootPath, "uploads"));
+        if (!fullPath.StartsWith(uploadsRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            fullPath = string.Empty;
+            return false;
+        }
+
         return System.IO.File.Exists(fullPath);
     }
 
-    private static string[] ParseCertifications(string certifications) =>
+    private static string GetUploadContentType(string fileName) =>
+        Path.GetExtension(fileName).ToLowerInvariant() switch
+        {
+            ".pdf" => "application/pdf",
+            ".png" => "image/png",
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".gif" => "image/gif",
+            ".webp" => "image/webp",
+            _ => "application/octet-stream"
+        };
+
+    private bool HasStoredUpload(SupplierComplianceDocument document) =>
+        TryResolveLocalUploadPath(document.FileUrl, out _);
+
+    private static string[] ParseCertifications(string? certifications) =>
         (certifications ?? string.Empty)
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
@@ -1264,6 +1420,7 @@ public class SuppliersController : Controller
             EntityId = entityId,
             Action = action,
             Actor = User.Identity?.Name ?? "system",
+            IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             TimestampUtc = DateTime.UtcNow,
             Details = details
         });

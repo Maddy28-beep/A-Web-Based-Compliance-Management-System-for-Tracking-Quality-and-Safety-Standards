@@ -1,0 +1,37 @@
+@model FurniComply.Web.Models.EnableAuthenticatorViewModel
+@{
+    ViewData["Title"] = "Enable Two-Factor Authentication";
+}
+
+<section class="hero">
+    <div>
+        <p class="eyebrow">Security</p>
+        <h1>Enable Two-Factor Authentication</h1>
+        <p class="lede">Use an authenticator app (Google Authenticator, Microsoft Authenticator, etc.) for an extra layer of security.</p>
+    </div>
+</section>
+
+<div class="table-card" style="max-width: 520px;">
+    <h3 class="table-section-title">Step 1: Scan QR Code</h3>
+    <p class="mb-3">Scan this QR code with your authenticator app, or manually enter the key below.</p>
+    <div class="mb-4">
+        <img src="@Url.Action("AuthenticatorQrCode")" alt="QR Code" width="200" height="200" />
+    </div>
+    <div class="alert alert-warning mb-3" role="alert">
+        <i class="fa-solid fa-triangle-exclamation me-2"></i>
+        <strong>Important:</strong> Save this QR code or the manual entry key somewhere safe. You may need it again when setting up 2FA on a new device or if you reinstall your authenticator app.
+    </div>
+    <p class="small text-muted">Manual entry key: <code class="user-select-all">@Model.SharedKey</code></p>
+
+    <h3 class="table-section-title mt-4">Step 2: Enter Verification Code</h3>
+    <form asp-action="EnableAuthenticator" method="post">
+        @Html.AntiForgeryToken()
+        <div asp-validation-summary="All" class="text-danger mb-2"></div>
+        <div class="mb-3">
+            <label asp-for="Code" class="form-label">6-digit code from your app</label>
+            <input asp-for="Code" class="form-control" style="max-width: 180px;" placeholder="000000" autocomplete="one-time-code" maxlength="7" />
+        </div>
+        <button type="submit" class="btn btn-success">Enable Two-Factor Auth</button>
+        <a asp-controller="Dashboard" asp-action="Index" class="btn btn-outline-secondary ms-2">Cancel</a>
+    </form>
+</div>

@@ -28,9 +28,16 @@
     <div>
         <p class="eyebrow">Compliance Governance</p>
         <h1>Audit Logs</h1>
-        <p class="lede">Immutable audit trail for all critical actions.</p>
+        <p class="lede">Transaction and general operational logs for business activity.</p>
     </div>
 </header>
+
+@if ((bool?)ViewBag.IsScopedToCurrentUser == true)
+{
+    <div class="alert alert-info">
+        This audit view is scoped to your own activity. Broader operational audit visibility is limited to audit and admin roles.
+    </div>
+}
 
 <div class="form-card">
     <form method="get" asp-action="Index">
@@ -59,6 +66,15 @@
                     @foreach (var item in (IEnumerable<string>)ViewBag.Actions)
                     {
                         <option value="@item" selected="@(item == (string?)ViewBag.AuditAction ? "selected" : null)">@item</option>
+                    }
+                </select>
+            </label>
+            <label>IP Address
+                <select name="ipAddress">
+                    <option value="">All</option>
+                    @foreach (var item in (IEnumerable<string>)ViewBag.IpAddresses)
+                    {
+                        <option value="@item" selected="@(item == (string?)ViewBag.IpAddress ? "selected" : null)">@item</option>
                     }
                 </select>
             </label>
@@ -91,6 +107,7 @@
                 <th>Entity</th>
                 <th>Action</th>
                 <th>Actor</th>
+                <th>IP Address</th>
                 <th>Timestamp (PHT)</th>
             </tr>
         </thead>
@@ -101,6 +118,7 @@
                 <td>@item.EntityName</td>
                 <td>@item.Action</td>
                 <td>@item.Actor</td>
+                <td>@(((bool?)ViewBag.CanViewSensitiveFields ?? false) ? item.IpAddress : "Restricted")</td>
                 <td>@TimeZoneInfo.ConvertTimeFromUtc(item.TimestampUtc, tz).ToString("yyyy-MM-dd hh:mm tt")</td>
             </tr>
         }
@@ -112,7 +130,7 @@
     <script>
         $(function () {
             $('.data-table').DataTable({
-                order: [[3, 'desc']]
+                order: [[4, 'desc']]
             });
         });
     </script>

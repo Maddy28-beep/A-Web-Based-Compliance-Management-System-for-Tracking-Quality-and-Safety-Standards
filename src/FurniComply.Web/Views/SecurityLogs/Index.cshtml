@@ -1,0 +1,170 @@
+@model FurniComply.Web.Models.SecurityLogsIndexViewModel
+
+@{
+    ViewData["Title"] = "Security Logs";
+    var canExportAudit =
+        User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.SuperAdmin) ||
+        User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.Admin) ||
+        User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.ComplianceManager);
+    TimeZoneInfo tz;
+    try
+    {
+        tz = TimeZoneInfo.FindSystemTimeZoneById("Asia/Manila");
+    }
+    catch
+    {
+        try
+        {
+            tz = TimeZoneInfo.FindSystemTimeZoneById("Singapore Standard Time");
+        }
+        catch
+        {
+            tz = TimeZoneInfo.Local;
+        }
+    }
+}
+
+<header class="hero">
+    <div>
+        <p class="eyebrow">Security Monitoring</p>
+        <h1>Security Logs</h1>
+        <p class="lede">Login attempts only: successful and failed sign-in activity with role-aware visibility and client IP tracking.</p>
+    </div>
+</header>
+
+<section class="erp-kpi-grid mb-4">
+    <article class="erp-kpi-card kpi-soft-blue">
+        <div class="erp-kpi-label">Visible Events</div>
+        <div class="erp-kpi-value">@Model.TotalEvents</div>
+    </article>
+    <article class="erp-kpi-card kpi-soft-green">
+        <div class="erp-kpi-label">Successful Logins Today</div>
+        <div class="erp-kpi-value">@Model.SuccessfulLoginsToday</div>
+    </article>
+    <article class="erp-kpi-card kpi-soft-orange">
+        <div class="erp-kpi-label">Failed Logins Today</div>
+        <div class="erp-kpi-value">@Model.FailedLoginsToday</div>
+    </article>
+    <article class="erp-kpi-card kpi-soft-blue">
+        <div class="erp-kpi-label">Unique IPs</div>
+        <div class="erp-kpi-value">@Model.UniqueIpCount</div>
+    </article>
+</section>
+
+@if (Model.IsScopedToCurrentUser)
+{
+    <div class="alert alert-info">
+        This view is scoped to your own security activity. Sensitive fields are restricted for your current role.
+    </div>
+}
+
+<div class="form-card">
+    <form method="get" asp-action="Index">
+        <div class="form-grid">
+            <label>Actor
+                <select name="actor">
+                    <option value="">All</option>
+                    @foreach (var item in (IEnumerable<string>)ViewBag.Actors)
+                    {
+                        <option value="@item" selected="@(item == (string?)ViewBag.Actor ? "selected" : null)">@item</option>
+                    }
+                </select>
+            </label>
+            <label>Category
+                <select name="category">
+                    <option value="">All</option>
+                    @foreach (var item in (IEnumerable<string>)ViewBag.Categories)
+                    {
+                        <option value="@item" selected="@(item == (string?)ViewBag.Category ? "selected" : null)">@item</option>
+                    }
+                </select>
+            </label>
+            <label>Action
+                <select name="securityAction">
+                    <option value="">All</option>
+                    @foreach (var item in (IEnumerable<string>)ViewBag.Actions)
+                    {
+                        <option value="@item" selected="@(item == (string?)ViewBag.SecurityAction ? "selected" : null)">@item</option>
+                    }
+                </select>
+            </label>
+            <label>IP Address
+                <select name="ipAddress">
+                    <option value="">All</option>
+                    @foreach (var item in (IEnumerable<string>)ViewBag.IpAddresses)
+                    {
+                        <option value="@item" selected="@(item == (string?)ViewBag.IpAddress ? "selected" : null)">@item</option>
+                    }
+                </select>
+            </label>
+            <label>From
+                <input type="date" name="from" value="@ViewBag.From" />
+            </label>
+            <label>To
+                <input type="date" name="to" value="@ViewBag.To" />
+            </label>
+        </div>
+        <div class="hero-actions">
+            <a class="btn btn-light" asp-action="Index">Reset Filters</a>
+            @if (canExportAudit)
+            {
+                <a class="btn export-btn export-btn-excel"
+                   asp-action="ExportCsv"
+                   asp-route-from="@ViewBag.From"
+                   asp-route-to="@ViewBag.To"><i class="fa-solid fa-table"></i> CSV</a>
+            }
+            <button class="btn btn-success px-4" type="submit"><i class="fa-solid fa-filter"></i> Apply Filters</button>
+        </div>
+    </form>
+</div>
+
+<div class="table-card">
+    @if (Model.TopIpAddresses.Any())
+    {
+        <div class="table-card-header">
+            <div>
+                <h3 class="table-section-title">Top IP Activity</h3>
+                <p class="table-card-subtitle">Most frequent visible IP addresses across login-attempt records in the current result set.</p>
+            </div>
+        </div>
+        <div class="mb-3">
+            @foreach (var ip in Model.TopIpAddresses)
+            {
+                <span class="meta-pill me-2 mb-2 d-inline-flex"><i class="fa-solid fa-network-wired"></i> @ip.IpAddress (@ip.Count)</span>
+            }
+        </div>
+    }
+    <table class="table data-table">
+        <thead>
+            <tr>
+                <th>Category</th>
+                <th>Action</th>
+                <th>Actor</th>
+                <th>IP Address</th>
+                <th>Timestamp (PHT)</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var item in Model.Logs)
+        {
+            <tr data-href="@Url.Action("Details", new { id = item.Id })">
+                <td>@item.Category</td>
+                <td>@item.Action</td>
+                <td>@item.Actor</td>
+                <td>@(Model.CanViewSensitiveFields ? item.IpAddress : "Restricted")</td>
+                <td>@TimeZoneInfo.ConvertTimeFromUtc(item.TimestampUtc, tz).ToString("yyyy-MM-dd hh:mm tt")</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</div>
+
+@section Scripts {
+    <script>
+        $(function () {
+            $('.data-table').DataTable({
+                order: [[4, 'desc']]
+            });
+        });
+    </script>
+}

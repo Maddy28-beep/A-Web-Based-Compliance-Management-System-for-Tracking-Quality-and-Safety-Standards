@@ -20,6 +20,10 @@ namespace FurniComply.Web.Controllers;
 [Authorize]
 public class DashboardController : Controller
 {
+    private const string AuthenticationCategory = "Authentication";
+    private const string LoginFailedAction = "Login Failed";
+    private const string AccountLockedAction = "Account Locked";
+
     private readonly IAnalyticsService _analytics;
     private readonly ISupplierComplianceScoreService _complianceScore;
     private readonly FurniComply.Infrastructure.Persistence.AppDbContext _db;
@@ -122,10 +126,7 @@ public class DashboardController : Controller
         }
     }
 
-    private List<RoleDashboardMetric> GetFallbackMetricsForRole(string roleName)
-    {
-        return new List<RoleDashboardMetric>();
-    }
+    private static List<RoleDashboardMetric> GetFallbackMetricsForRole(string roleName) => new();
 
     private static string GetFallbackFocusForRole(string roleName) =>
         roleName switch
@@ -141,8 +142,8 @@ public class DashboardController : Controller
     private async Task<RoleDashboardViewModel> BuildSuperAdminDashboardAsync(DateTime? from, DateTime? to)
     {
         var now = DateTime.UtcNow;
-        var rangeStart = from.HasValue ? DateTime.SpecifyKind(from.Value.Date, DateTimeKind.Utc) : now.AddHours(-24);
-        var rangeEndExcl = to.HasValue ? DateTime.SpecifyKind(to.Value.Date.AddDays(1), DateTimeKind.Utc) : now.AddSeconds(1);
+        var (rangeStart, rangeEndExcl) = GetUtcRange(now, from, to, now.AddHours(-24), now.AddSeconds(1));
+        var (todayStart, todayEndExcl) = GetUtcDayRange(now);
 
         var totalUsers = await _db.Users.CountAsync();
         var totalRoles = await _db.Roles.CountAsync();
@@ -151,6 +152,16 @@ public class DashboardController : Controller
         var recentAuditCount = await _db.AuditLogs.CountAsync(a => a.TimestampUtc >= rangeStart && a.TimestampUtc < rangeEndExcl);
         var errorLogCount = await _db.AuditLogs.CountAsync(a => a.Action.Contains("Error") && a.TimestampUtc >= rangeStart && a.TimestampUtc < rangeEndExcl);
         var pendingOverrideRequests = await _db.Suppliers.CountAsync(s => s.OverrideRequestActive);
+        var failedLoginsToday = await _db.SecurityLogs.CountAsync(s =>
+            s.Category == AuthenticationCategory &&
+            s.Action == LoginFailedAction &&
+            s.TimestampUtc >= todayStart &&
+            s.TimestampUtc < todayEndExcl);
+        var lockedAccountsToday = await _db.SecurityLogs.CountAsync(s =>
+            s.Category == AuthenticationCategory &&
+            s.Action == AccountLockedAction &&
+            s.TimestampUtc >= todayStart &&
+            s.TimestampUtc < todayEndExcl);
 
         var recentAudits = await _db.AuditLogs
             .Where(a => a.TimestampUtc >= rangeStart && a.TimestampUtc < rangeEndExcl)
@@ -180,13 +191,34 @@ public class DashboardController : Controller
                 Url.Action("Details", "Suppliers", new { id = s.Id })))
             .ToList();
 
+        var topFailedLoginIps = await _db.SecurityLogs
+            .Where(s =>
+                s.Category == AuthenticationCategory &&
+                s.Action == LoginFailedAction &&
+                !string.IsNullOrWhiteSpace(s.IpAddress) &&
+                s.IpAddress != "unknown" &&
+                s.TimestampUtc >= todayStart &&
+                s.TimestampUtc < todayEndExcl)
+            .GroupBy(s => s.IpAddress)
+            .Select(g => new
+            {
+                IpAddress = g.Key,
+                Count = g.Count()
+            })
+            .OrderByDescending(x => x.Count)
+            .ThenBy(x => x.IpAddress)
+            .Take(5)
+            .ToListAsync();
+
         var commonKpis = await GetCommonKpiMetricsAsync(from, to);
         var metrics = commonKpis.Concat(new List<RoleDashboardMetric>
         {
             new("Total Users", totalUsers.ToString(), "Identity inventory", Url.Action("Users", "Admin")),
             new("Active Roles", totalRoles.ToString(), "Role catalog health", Url.Action("Users", "Admin")),
             new("Failed Login Attempts", failedLoginAttempts.ToString(), "Current account lockout signals", Url.Action("Users", "Admin")),
-            new("Override Requests", pendingOverrideRequests.ToString(), "Suppliers waiting for document exception", Url.Action("Index", "Suppliers"))
+            new("Override Requests", pendingOverrideRequests.ToString(), "Suppliers waiting for document exception", Url.Action("Index", "Suppliers")),
+            new("Failed Logins Today", failedLoginsToday.ToString(), "Authentication failures recorded today", Url.Action("Index", "SecurityLogs")),
+            new("Locked Accounts Today", lockedAccountsToday.ToString(), "Account lockouts recorded today", Url.Action("Index", "SecurityLogs"))
         }).ToList();
 
         return new RoleDashboardViewModel(
@@ -199,7 +231,41 @@ public class DashboardController : Controller
                 new("System Error Logs", $"{errorLogCount} recent entries tagged as error", "warn", Url.Action("Index", "AuditLogs")),
                 new("Workflow Rules Active", $"{activeWorkflowRules} active alert/workflow rules", "neutral", Url.Action("Index", "ComplianceAlertRules")),
                 new("Pending Doc Overrides", $"{pendingOverrideRequests} suppliers requesting document exception", pendingOverrideRequests > 0 ? "risk" : "good", Url.Action("Index", "Suppliers"))
-            });
+            }
+            .Concat(BuildFailedLoginIpAlerts(topFailedLoginIps))
+            .ToList());
+    }
+
+    private static (DateTime Start, DateTime EndExclusive) GetUtcRange(
+        DateTime now,
+        DateTime? from,
+        DateTime? to,
+        DateTime defaultStart,
+        DateTime defaultEndExclusive)
+    {
+        var rangeStart = from.HasValue
+            ? DateTime.SpecifyKind(from.Value.Date, DateTimeKind.Utc)
+            : defaultStart;
+        var rangeEndExclusive = to.HasValue
+            ? DateTime.SpecifyKind(to.Value.Date.AddDays(1), DateTimeKind.Utc)
+            : defaultEndExclusive;
+
+        return (rangeStart, rangeEndExclusive);
+    }
+
+    private static (DateTime Start, DateTime EndExclusive) GetUtcDayRange(DateTime utcNow)
+    {
+        var dayStart = utcNow.Date;
+        return (dayStart, dayStart.AddDays(1));
+    }
+
+    private IEnumerable<RoleDashboardItem> BuildFailedLoginIpAlerts(IEnumerable<dynamic> topFailedLoginIps)
+    {
+        return topFailedLoginIps.Select(ip => new RoleDashboardItem(
+            $"Failed Login IP: {ip.IpAddress}",
+            $"{ip.Count} failed login attempt(s) today",
+            ip.Count >= 5 ? "risk" : "warn",
+            Url.Action("Index", "SecurityLogs", new { ipAddress = ip.IpAddress })));
     }
 
     private async Task<RoleDashboardViewModel> BuildAdminDashboardAsync(DateTime? from, DateTime? to)
@@ -849,6 +915,7 @@ public class DashboardController : Controller
             EntityId = alert.Id,
             Action = "Acknowledge",
             Actor = User.Identity?.Name ?? "system",
+            IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             TimestampUtc = DateTime.UtcNow,
             Details = "Alert acknowledged."
         });
@@ -876,6 +943,7 @@ public class DashboardController : Controller
             EntityId = alert.Id,
             Action = "Resolve",
             Actor = User.Identity?.Name ?? "system",
+            IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             TimestampUtc = DateTime.UtcNow,
             Details = "Alert resolved."
         });

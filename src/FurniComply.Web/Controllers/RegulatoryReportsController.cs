@@ -5,11 +5,13 @@ using System.Threading.Tasks;
 using ClosedXML.Excel;
 using FurniComply.Domain.Enums;
 using FurniComply.Infrastructure.Identity;
+using FurniComply.Web;
 using FurniComply.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
@@ -20,10 +22,12 @@ namespace FurniComply.Web.Controllers;
 public class RegulatoryReportsController : Controller
 {
     private readonly AppDbContext _db;
+    private readonly ILogger<RegulatoryReportsController> _logger;
 
-    public RegulatoryReportsController(AppDbContext db)
+    public RegulatoryReportsController(AppDbContext db, ILogger<RegulatoryReportsController> logger)
     {
         _db = db;
+        _logger = logger;
     }
 
     public async Task<IActionResult> Index()
@@ -606,6 +610,7 @@ public class RegulatoryReportsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Regulatory reports PDF export failed.");
             var reports = await _db.RegulatoryReports
                 .Include(r => r.ReportStatus)
                 .Include(r => r.Supplier)
@@ -613,7 +618,7 @@ public class RegulatoryReportsController : Controller
                 .ToListAsync();
 
             ViewBag.GeneratedAtUtc = DateTime.UtcNow;
-            ViewBag.PdfFallbackReason = ex.Message;
+            ViewBag.PdfFallbackReason = SafeErrorMessages.PdfUnavailable;
             TempData["WarningMessage"] = "PDF engine unavailable. Opening print view.";
             return View("ExportPdfFallback", reports);
         }
@@ -754,6 +759,7 @@ public class RegulatoryReportsController : Controller
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Single regulatory report PDF export failed for {ReportId}", id);
             var report = await _db.RegulatoryReports
                 .Include(r => r.ReportStatus)
                 .Include(r => r.Supplier)
@@ -764,7 +770,7 @@ public class RegulatoryReportsController : Controller
             }
 
             ViewBag.GeneratedAtUtc = DateTime.UtcNow;
-            ViewBag.PdfFallbackReason = ex.Message;
+            ViewBag.PdfFallbackReason = SafeErrorMessages.PdfUnavailable;
             TempData["WarningMessage"] = "PDF engine unavailable. Opening print view.";
             return View("ExportPdfSingleFallback", report);
         }
@@ -1101,7 +1107,9 @@ public class RegulatoryReportsController : Controller
                     ca.ComplianceCheckId.HasValue &&
                     latestNonCompliantCheckIds.Contains(ca.ComplianceCheckId.Value) &&
                     ca.Status == CorrectiveActionStatus.Closed)
-                .Select(ca => ca.ComplianceCheckId.Value)
+                .Select(ca => ca.ComplianceCheckId)
+                .Where(id => id.HasValue)
+                .Select(id => id!.Value)
                 .Distinct()
                 .ToListAsync();
 
@@ -1135,6 +1143,7 @@ public class RegulatoryReportsController : Controller
             EntityId = entityId,
             Action = action,
             Actor = User.Identity?.Name ?? "system",
+            IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             TimestampUtc = DateTime.UtcNow,
             Details = details
         });

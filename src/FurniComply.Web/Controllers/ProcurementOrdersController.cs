@@ -8,6 +8,7 @@ using FurniComply.Domain.Entities;
 using FurniComply.Domain.Enums;
 using FurniComply.Infrastructure.Identity;
 using FurniComply.Infrastructure.Persistence;
+using FurniComply.Infrastructure.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
@@ -147,13 +148,67 @@ public class ProcurementOrdersController : Controller
             return View(order);
         }
 
-        // ENFORCEMENT LOGIC: Block usage of non-approved or suspended suppliers
+        // VALIDATION: Check for duplicate email and phone number
         var supplier = await _db.Suppliers.FindAsync(order.SupplierId);
+        if (supplier != null)
+        {
+            // Check for duplicate email
+            if (!string.IsNullOrWhiteSpace(supplier.ContactEmail))
+            {
+                var normalizedContactEmail = supplier.ContactEmail.Trim().ToUpperInvariant();
+                var existingSupplierWithEmail = await _db.Suppliers
+                    .Where(s => s.Id != supplier.Id && 
+                               s.ContactEmail != null &&
+                               s.ContactEmail.ToUpper() == normalizedContactEmail)
+                    .FirstOrDefaultAsync();
+
+                if (existingSupplierWithEmail != null)
+                {
+                    TempData["ErrorMessage"] = $"A supplier with email '{supplier.ContactEmail}' already exists: {existingSupplierWithEmail.Name}. Please use a different email address.";
+                    
+                    await PopulateSuppliersAsync();
+                    PopulateStatuses();
+                    await PopulateItemLookupsAsync();
+                    return View(order);
+                }
+            }
+
+            // Check for duplicate phone number
+            if (!string.IsNullOrWhiteSpace(supplier.PhoneNumber))
+            {
+                var normalizedPhoneNumber = supplier.PhoneNumber.Trim();
+                var existingSupplierWithPhone = await _db.Suppliers
+                    .Where(s => s.Id != supplier.Id && 
+                               s.PhoneNumber != null &&
+                               s.PhoneNumber == normalizedPhoneNumber)
+                    .FirstOrDefaultAsync();
+
+                if (existingSupplierWithPhone != null)
+                {
+                    TempData["ErrorMessage"] = $"A supplier with phone number '{supplier.PhoneNumber}' already exists: {existingSupplierWithPhone.Name}. Please use a different phone number.";
+                    
+                    await PopulateSuppliersAsync();
+                    PopulateStatuses();
+                    await PopulateItemLookupsAsync();
+                    return View(order);
+                }
+            }
+        }
+        else
+        {
+            TempData["ErrorMessage"] = "Selected supplier was not found.";
+            await PopulateSuppliersAsync();
+            PopulateStatuses();
+            await PopulateItemLookupsAsync();
+            return View(order);
+        }
+
+        // ENFORCEMENT LOGIC: Block usage of non-approved or suspended suppliers
         var canBeUsed = await _performance.CanSupplierBeUsedAsync(order.SupplierId);
         
         if (!canBeUsed)
         {
-            var gate = await _procurement.GetOrderApprovalBlockerAsync(new ProcurementOrder { SupplierId = order.SupplierId, Supplier = supplier! }, "create", User.Identity?.Name);
+            var gate = await _procurement.GetOrderApprovalBlockerAsync(new ProcurementOrder { SupplierId = order.SupplierId, Supplier = supplier }, "create", User.Identity?.Name);
             if (gate.IsBlocked)
             {
                 TempData["ErrorMessage"] = gate.Message;
@@ -218,6 +273,7 @@ public class ProcurementOrdersController : Controller
 
         AddAudit(nameof(ProcurementOrder), order.Id, "Create", $"Created order {order.OrderNumber}.");
         await _db.SaveChangesAsync();
+        
         TempData["SuccessMessage"] = $"Order {order.OrderNumber} created.";
         return RedirectToAction(nameof(Details), new { id = order.Id });
     }
@@ -263,13 +319,64 @@ public class ProcurementOrdersController : Controller
             return View(order);
         }
 
-        // ENFORCEMENT LOGIC: Block usage of non-approved or suspended suppliers
+        // VALIDATION: Check for duplicate email and phone number
         var supplier = await _db.Suppliers.FindAsync(order.SupplierId);
+        if (supplier != null)
+        {
+            // Check for duplicate email (excluding current supplier)
+            if (!string.IsNullOrWhiteSpace(supplier.ContactEmail))
+            {
+                var normalizedContactEmail = supplier.ContactEmail.Trim().ToUpperInvariant();
+                var existingSupplierWithEmail = await _db.Suppliers
+                    .Where(s => s.Id != supplier.Id && 
+                               s.ContactEmail != null &&
+                               s.ContactEmail.ToUpper() == normalizedContactEmail)
+                    .FirstOrDefaultAsync();
+
+                if (existingSupplierWithEmail != null)
+                {
+                    TempData["ErrorMessage"] = $"A supplier with email '{supplier.ContactEmail}' already exists: {existingSupplierWithEmail.Name}. Please use a different email address.";
+                    
+                    await PopulateSuppliersAsync();
+                    PopulateStatuses();
+                    return View(order);
+                }
+            }
+
+            // Check for duplicate phone number (excluding current supplier)
+            if (!string.IsNullOrWhiteSpace(supplier.PhoneNumber))
+            {
+                var normalizedPhoneNumber = supplier.PhoneNumber.Trim();
+                var existingSupplierWithPhone = await _db.Suppliers
+                    .Where(s => s.Id != supplier.Id && 
+                               s.PhoneNumber != null &&
+                               s.PhoneNumber == normalizedPhoneNumber)
+                    .FirstOrDefaultAsync();
+
+                if (existingSupplierWithPhone != null)
+                {
+                    TempData["ErrorMessage"] = $"A supplier with phone number '{supplier.PhoneNumber}' already exists: {existingSupplierWithPhone.Name}. Please use a different phone number.";
+                    
+                    await PopulateSuppliersAsync();
+                    PopulateStatuses();
+                    return View(order);
+                }
+            }
+        }
+        else
+        {
+            TempData["ErrorMessage"] = "Selected supplier was not found.";
+            await PopulateSuppliersAsync();
+            PopulateStatuses();
+            return View(order);
+        }
+
+        // ENFORCEMENT LOGIC: Block usage of non-approved or suspended suppliers
         var canBeUsed = await _performance.CanSupplierBeUsedAsync(order.SupplierId);
 
         if (!canBeUsed)
         {
-            var gate = await _procurement.GetOrderApprovalBlockerAsync(new ProcurementOrder { SupplierId = order.SupplierId, Supplier = supplier! }, "edit", User.Identity?.Name);
+            var gate = await _procurement.GetOrderApprovalBlockerAsync(new ProcurementOrder { SupplierId = order.SupplierId, Supplier = supplier }, "edit", User.Identity?.Name);
             if (gate.IsBlocked)
             {
                 TempData["ErrorMessage"] = gate.Message;
@@ -728,6 +835,7 @@ public class ProcurementOrdersController : Controller
             EntityId = entityId,
             Action = action,
             Actor = User.Identity?.Name ?? "system",
+            IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             TimestampUtc = DateTime.UtcNow,
             Details = details
         });

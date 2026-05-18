@@ -1,0 +1,19 @@
+@{
+    ViewData["Title"] = "Two-Factor Authentication";
+}
+
+<section class="hero">
+    <div>
+        <p class="eyebrow">Security</p>
+        <h1>Two-Factor Authentication</h1>
+        <p class="lede">Two-factor authentication is enabled on your account.</p>
+    </div>
+</section>
+
+<div class="table-card" style="max-width: 520px;">
+    <div class="alert alert-success mb-3"><i class="fa-solid fa-shield-check"></i> Your account is protected with two-factor authentication.</div>
+    <form asp-action="DisableAuthenticator" method="post" onsubmit="return confirm('Disable two-factor authentication? This reduces the security of your account.');">
+        @Html.AntiForgeryToken()
+        <button type="submit" class="btn btn-outline-danger">Disable Two-Factor Auth</button>
+    </form>
+</div>

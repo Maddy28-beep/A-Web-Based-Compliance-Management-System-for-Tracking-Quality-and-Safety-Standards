@@ -3,6 +3,20 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Configuration", "Configuration", "{E8F4A2B1-3C5D-4E6F-9A0B-1C2D3E4F5A6B}"
+	ProjectSection(SolutionItems) = preProject
+		FurniComply.sln = FurniComply.sln
+		README.md = README.md
+		.gitignore = .gitignore
+		.env.example = .env.example
+		.github\workflows\security.yml = .github\workflows\security.yml
+		docs\Information-Security-Documentation-Panel-Format.docx = docs\Information-Security-Documentation-Panel-Format.docx
+		scripts\Run-SecurityAudit.ps1 = scripts\Run-SecurityAudit.ps1
+		security-audit\latest-report.txt = security-audit\latest-report.txt
+		src\FurniComply.Web\.env = src\FurniComply.Web\.env
+		src\FurniComply.Web\App_Data\FurniComply.local.db = src\FurniComply.Web\App_Data\FurniComply.local.db
+	EndProjectSection
+EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FurniComply.Application", "src\FurniComply.Application\FurniComply.Application.csproj", "{09881ED4-CB6B-40CF-AD7E-F6D014423689}"

@@ -1,0 +1,66 @@
+@model IEnumerable<FurniComply.Domain.Entities.AccessRequest>
+@{
+    ViewData["Title"] = "Access Requests";
+}
+
+<section class="hero">
+    <div>
+        <p class="eyebrow">Administration</p>
+        <h1>Access Requests</h1>
+        <p class="lede">Review and approve or reject access requests from prospective users.</p>
+    </div>
+    <div class="hero-actions">
+        <a class="btn btn-outline-secondary" asp-action="Users"><i class="fa-solid fa-users"></i> User Management</a>
+    </div>
+</section>
+
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success">@TempData["SuccessMessage"]</div>
+}
+
+@if (!Model.Any())
+{
+    <div class="alert alert-info">No pending access requests.</div>
+}
+else
+{
+    <div class="table-card">
+        <table class="table data-table">
+            <thead>
+                <tr>
+                    <th>Email</th>
+                    <th>Full Name</th>
+                    <th>Reason</th>
+                    <th>Preferred Role</th>
+                    <th>Requested</th>
+                    <th class="table-cell-center" style="width:180px;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var r in Model)
+                {
+                    <tr>
+                        <td>@r.Email</td>
+                        <td>@r.FullName</td>
+                        <td>@(r.Reason != null ? (r.Reason.Length > 80 ? r.Reason.Substring(0, 80) + "…" : r.Reason) : "—")</td>
+                        <td>@(r.PreferredRole ?? "—")</td>
+                        <td>@r.CreatedAtUtc.ToString("yyyy-MM-dd HH:mm")</td>
+                        <td class="actions-cell table-cell-center">
+                            <form asp-action="ApproveAccessRequest" method="post" class="d-inline">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@r.Id" />
+                                <button type="submit" class="btn btn-sm btn-success">Approve & Create User</button>
+                            </form>
+                            <form asp-action="RejectAccessRequest" method="post" class="d-inline ms-1" data-confirm="reject">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@r.Id" />
+                                <button type="submit" class="btn btn-sm btn-outline-danger">Reject</button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}

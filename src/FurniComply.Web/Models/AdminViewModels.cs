@@ -1,10 +1,21 @@
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 
 namespace FurniComply.Web.Models;
 
-public record UserSummary(string Id, string Email, IReadOnlyList<string> Roles);
+public record UserSummary(string Id, string Email, IReadOnlyList<string> Roles, bool TwoFactorEnabled = false);
 public record RoleSummary(string Id, string Name, int UserCount, bool IsProtected);
+public record BackupFileSummary(string FileName, long SizeBytes, DateTime CreatedUtc, string DisplaySize);
+
+public class BackupHistoryViewModel
+{
+    public bool IsSqlite { get; init; }
+    public bool CanCreateBackup { get; init; }
+    public string BackupModeLabel { get; init; } = string.Empty;
+    public string DatabaseLocation { get; init; } = string.Empty;
+    public IReadOnlyList<BackupFileSummary> Backups { get; init; } = Array.Empty<BackupFileSummary>();
+}
 
 public class UserRolesViewModel
 {
@@ -22,9 +33,10 @@ public class RoleSelection
 public class CreateUserViewModel
 {
     [Required(ErrorMessage = "Email is required.")]
-    [EmailAddress]
+    [EmailAddress(ErrorMessage = "Please enter a valid email address.")]
     public string Email { get; set; } = string.Empty;
 
+    [StringLength(180, ErrorMessage = "Full name cannot exceed 180 characters.")]
     public string FullName { get; set; } = string.Empty;
 
     /// <summary>

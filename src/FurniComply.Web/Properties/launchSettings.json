@@ -1,38 +1,35 @@
 {
   "profiles": {
+    "Capstone": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Capstone",
+        "ASPNETCORE_URLS": "http://localhost:5280"
+      },
+      "dotnetRunMessages": true,
+      "applicationUrl": "http://localhost:5280"
+    },
     "http": {
       "commandName": "Project",
       "launchBrowser": true,
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_URLS": "http://localhost:5280"
       },
       "dotnetRunMessages": true,
-      "applicationUrl": "http://localhost:5127"
+      "applicationUrl": "http://localhost:5280"
     },
     "https": {
       "commandName": "Project",
       "launchBrowser": true,
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_URLS": "https://localhost:7180;http://localhost:5280"
       },
       "dotnetRunMessages": true,
-      "applicationUrl": "https://localhost:7170;http://localhost:5127"
-    },
-    "IIS Express": {
-      "commandName": "IISExpress",
-      "launchBrowser": true,
-      "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
-      }
+      "applicationUrl": "https://localhost:7180;http://localhost:5280"
     }
   },
-  "$schema": "https://json.schemastore.org/launchsettings.json",
-  "iisSettings": {
-    "windowsAuthentication": false,
-    "anonymousAuthentication": true,
-    "iisExpress": {
-      "applicationUrl": "http://localhost:57450/",
-      "sslPort": 44382
-    }
-  }
+  "$schema": "https://json.schemastore.org/launchsettings.json"
 }

@@ -400,6 +400,10 @@
             <form action="/Account/Login" method="post">
                 @Html.AntiForgeryToken()
                 <input type="hidden" asp-for="ReturnUrl" />
+                @if (ViewBag.RateLimitMessage != null)
+                {
+                    <div class="validation" style="background:rgba(183,110,0,0.12);color:#6b4a00;padding:0.6rem 1rem;border-radius:8px;margin-bottom:0.75rem;">@ViewBag.RateLimitMessage</div>
+                }
                 <div asp-validation-summary="All" class="validation"></div>
 
                 <div class="field">
@@ -426,8 +430,9 @@
                         <input asp-for="RememberMe" type="checkbox" />
                         Remember me
                     </label>
-                    <a class="forgot" href="#">Forgot your password?</a>
                 </div>
+
+                <partial name="_RecaptchaWidget" />
 
                 <button class="btn-submit" type="submit">
                     Sign In <i class="fa-solid fa-arrow-right" style="margin-left:0.4rem;font-size:0.9rem;"></i>
@@ -444,6 +449,10 @@
                     <a href="/Home/RequestAccess">Request Access</a>
                 </div>
             </form>
+
+            <div class="meta-row" style="margin-top:0.35rem; justify-content:flex-end;">
+                <a class="forgot" href="@Url.Action("ForgotPassword", "Account")">Forgot your password?</a>
+            </div>
         </section>
     </main>
 

@@ -20,6 +20,7 @@
     }
 
     var localTimestamp = TimeZoneInfo.ConvertTimeFromUtc(Model.TimestampUtc, tz);
+    var canViewSensitiveFields = (bool?)ViewBag.CanViewSensitiveFields ?? false;
 }
 
 <section class="hero">
@@ -39,7 +40,9 @@
         <dd>@Model.EntityId</dd>
         <dt>Actor</dt>
         <dd>@Model.Actor</dd>
+        <dt>IP Address</dt>
+        <dd>@(canViewSensitiveFields ? Model.IpAddress : "Restricted")</dd>
         <dt>Details</dt>
-        <dd>@Model.Details</dd>
+        <dd>@(canViewSensitiveFields ? Model.Details : "Restricted for your role")</dd>
     </dl>
 </div>

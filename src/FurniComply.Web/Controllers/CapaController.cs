@@ -39,6 +39,7 @@ public class CapaController : Controller
     {
         var capa = await _db.CorrectiveActions.FindAsync(id);
         if (capa == null) return NotFound();
+        if (!await CanAccessCapaAsync(id)) return Forbid();
 
         if (capa.Status == CorrectiveActionStatus.Closed)
         {
@@ -77,6 +78,7 @@ public class CapaController : Controller
     {
         var capa = await _db.CorrectiveActions.FindAsync(id);
         if (capa == null) return NotFound();
+        if (!await CanAccessCapaAsync(id)) return Forbid();
 
         if (capa.Status == CorrectiveActionStatus.Closed)
         {
@@ -107,6 +109,7 @@ public class CapaController : Controller
     {
         var capa = await _db.CorrectiveActions.FindAsync(id);
         if (capa == null) return NotFound();
+        if (!await CanAccessCapaAsync(id)) return Forbid();
 
         if (capa.Status != CorrectiveActionStatus.EvidenceSubmitted)
         {
@@ -211,6 +214,7 @@ public class CapaController : Controller
             EntityId = entityId,
             Action = action,
             Actor = User.Identity?.Name ?? "system",
+            IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             TimestampUtc = DateTime.UtcNow,
             Details = details
         });
@@ -223,6 +227,7 @@ public class CapaController : Controller
     {
         var capa = await _db.CorrectiveActions.FindAsync(id);
         if (capa == null) return NotFound();
+        if (!await CanAccessCapaAsync(id)) return Forbid();
 
         if (capa.Status == CorrectiveActionStatus.Closed)
         {
@@ -297,6 +302,10 @@ public class CapaController : Controller
         {
             return NotFound();
         }
+        if (!await CanAccessCapaAsync(id))
+        {
+            return Forbid();
+        }
 
         if (!string.IsNullOrWhiteSpace(capa.AssignedTo))
         {
@@ -304,14 +313,8 @@ public class CapaController : Controller
             ViewBag.AssignedToFullName = user?.FullName ?? capa.AssignedTo;
         }
 
-        var now = DateTimeOffset.UtcNow;
-        var users = await _db.Users
-            .AsNoTracking()
-            .Where(u => !u.LockoutEnd.HasValue || u.LockoutEnd <= now)
-            .OrderBy(u => u.FullName ?? u.Email ?? "")
-            .Select(u => new { u.Email, Display = $"{(string.IsNullOrEmpty(u.FullName) ? u.Email : u.FullName)} ({u.Email})" })
-            .ToListAsync();
-        ViewBag.UserOptions = new SelectList(users, "Email", "Display");
+        var userOptions = await GetActiveUserOptionsAsync();
+        ViewBag.UserOptions = new SelectList(userOptions, "Email", "Display");
 
         return View(capa);
     }
@@ -333,12 +336,11 @@ public class CapaController : Controller
                 (c.IssueType == CorrectiveActionType.Quality && (c.AssignedTo == user || c.AssignedTo == "Procurement Team")));
         }
 
-        var nowOffset = DateTimeOffset.UtcNow;
-        var registeredEmails = await _db.Users
-            .AsNoTracking()
-            .Where(u => !u.LockoutEnd.HasValue || u.LockoutEnd <= nowOffset)
+        var activeUsers = await GetActiveUsersAsync();
+        var registeredEmails = activeUsers
+            .Where(u => !string.IsNullOrWhiteSpace(u.Email))
             .Select(u => u.Email!)
-            .ToListAsync();
+            .ToList();
         var assigneeOptions = await scopedBaseQuery
             .Where(c => c.AssignedTo != null && c.AssignedTo.Trim() != string.Empty && registeredEmails.Contains(c.AssignedTo))
             .Select(c => c.AssignedTo!)
@@ -405,6 +407,32 @@ public class CapaController : Controller
         };
 
         return View(model);
+    }
+
+    private async Task<List<ApplicationUser>> GetActiveUsersAsync()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var allUsers = await _db.Users
+            .AsNoTracking()
+            .ToListAsync();
+
+        return allUsers
+            .Where(u => !u.LockoutEnd.HasValue || u.LockoutEnd <= now)
+            .ToList();
+    }
+
+    private async Task<List<object>> GetActiveUserOptionsAsync()
+    {
+        var activeUsers = await GetActiveUsersAsync();
+
+        return activeUsers
+            .OrderBy(u => u.FullName ?? u.Email ?? string.Empty)
+            .Select(u => (object)new
+            {
+                u.Email,
+                Display = $"{(string.IsNullOrEmpty(u.FullName) ? u.Email : u.FullName)} ({u.Email})"
+            })
+            .ToList();
     }
 
     private static string NormalizeFilter(string? filter)
@@ -506,5 +534,33 @@ public class CapaController : Controller
 
         var supplierName = candidate.Trim();
         return string.IsNullOrWhiteSpace(supplierName) ? "-" : supplierName;
+    }
+
+    private async Task<bool> CanAccessCapaAsync(Guid capaId)
+    {
+        if (!User.IsInRole(RoleNames.DepartmentHead))
+        {
+            return true;
+        }
+
+        var user = User.Identity?.Name ?? string.Empty;
+        var capa = await _db.CorrectiveActions
+            .AsNoTracking()
+            .Include(c => c.ComplianceCheck)
+                .ThenInclude(ch => ch!.Policy)
+            .FirstOrDefaultAsync(c => c.Id == capaId);
+
+        if (capa == null)
+        {
+            return false;
+        }
+
+        if (capa.ComplianceCheckId.HasValue && capa.ComplianceCheck?.Policy != null)
+        {
+            return capa.ComplianceCheck.Policy.Owner == user;
+        }
+
+        return capa.IssueType == CorrectiveActionType.Quality &&
+            (capa.AssignedTo == user || capa.AssignedTo == "Procurement Team");
     }
 }

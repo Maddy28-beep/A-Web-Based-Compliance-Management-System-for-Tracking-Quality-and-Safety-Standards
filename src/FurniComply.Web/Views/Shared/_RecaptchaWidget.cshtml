@@ -1,0 +1,8 @@
+@inject FurniComply.Web.Services.IReCaptchaService Recaptcha
+@if (Recaptcha.IsEnabled && !string.IsNullOrEmpty(Recaptcha.SiteKey))
+{
+    <div class="recaptcha-field" style="margin: 0.75rem 0;">
+        <div class="g-recaptcha" data-sitekey="@Recaptcha.SiteKey"></div>
+    </div>
+    <script src="@Recaptcha.ScriptUrl" async defer></script>
+}

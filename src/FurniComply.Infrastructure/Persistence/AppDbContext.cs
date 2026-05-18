@@ -1,5 +1,7 @@
 using FurniComply.Domain.Entities;
 using FurniComply.Infrastructure.Identity;
+using FurniComply.Infrastructure.Persistence.Converters;
+using FurniComply.Infrastructure.Services;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
@@ -7,13 +9,17 @@ namespace FurniComply.Infrastructure.Persistence;
 
 public class AppDbContext : IdentityDbContext<ApplicationUser>
 {
-    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
+    private readonly IEncryptionService _encryptionService;
+
+    public AppDbContext(DbContextOptions<AppDbContext> options, IEncryptionService encryptionService) : base(options)
     {
+        _encryptionService = encryptionService;
     }
 
     public DbSet<Policy> Policies => Set<Policy>();
     public DbSet<ComplianceCheck> ComplianceChecks => Set<ComplianceCheck>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<SecurityLog> SecurityLogs => Set<SecurityLog>();
     public DbSet<RegulatoryReport> RegulatoryReports => Set<RegulatoryReport>();
     public DbSet<Supplier> Suppliers => Set<Supplier>();
     public DbSet<ProcurementOrder> ProcurementOrders => Set<ProcurementOrder>();
@@ -32,10 +38,14 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<CorrectiveAction> CorrectiveActions => Set<CorrectiveAction>();
     public DbSet<SupplierPerformance> SupplierPerformances => Set<SupplierPerformance>();
     public DbSet<SupplierEvaluation> SupplierEvaluations => Set<SupplierEvaluation>();
+    public DbSet<AccessRequest> AccessRequests => Set<AccessRequest>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+        var encryptedStringConverter = new EncryptedStringValueConverter(_encryptionService);
+        var unlimitedEncryptedColumnType = Database.IsSqlite() ? "TEXT" : "nvarchar(max)";
+        var createdUtcDefaultSql = Database.IsSqlite() ? "CURRENT_TIMESTAMP" : "GETUTCDATE()";
 
         var complianceStatusPendingId = new Guid("11111111-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
         var complianceStatusCompliantId = new Guid("22222222-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
@@ -91,6 +101,34 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             entity.HasQueryFilter(c => !c.IsDeleted && !c.Policy!.IsDeleted);
         });
 
+        modelBuilder.Entity<AuditLog>(entity =>
+        {
+            entity.Property(a => a.EntityName).HasMaxLength(100);
+            entity.Property(a => a.Action).HasMaxLength(120);
+            entity.Property(a => a.Actor).HasMaxLength(256);
+            entity.Property(a => a.IpAddress)
+                .HasConversion(encryptedStringConverter)
+                .HasColumnType(unlimitedEncryptedColumnType);
+            entity.Property(a => a.Details).HasMaxLength(2000);
+            entity.HasIndex(a => a.TimestampUtc);
+            entity.HasIndex(a => new { a.EntityName, a.TimestampUtc });
+        });
+
+        modelBuilder.Entity<SecurityLog>(entity =>
+        {
+            entity.Property(s => s.Category).HasMaxLength(80);
+            entity.Property(s => s.Action).HasMaxLength(120);
+            entity.Property(s => s.Actor).HasMaxLength(256);
+            entity.Property(s => s.UserId).HasMaxLength(450);
+            entity.Property(s => s.IpAddress)
+                .HasConversion(encryptedStringConverter)
+                .HasColumnType(unlimitedEncryptedColumnType);
+            entity.Property(s => s.Details).HasMaxLength(2000);
+            entity.HasIndex(s => s.TimestampUtc);
+            entity.HasIndex(s => new { s.Category, s.TimestampUtc });
+            entity.HasIndex(s => new { s.Actor, s.TimestampUtc });
+        });
+
         modelBuilder.Entity<ProcurementOrder>(entity =>
         {
             entity.HasOne(p => p.Supplier)
@@ -114,7 +152,15 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
         modelBuilder.Entity<Supplier>(entity =>
         {
             entity.Property(s => s.Name).HasMaxLength(200);
-            entity.Property(s => s.ContactEmail).HasMaxLength(200);
+            entity.Property(s => s.ContactEmail)
+                .HasConversion(encryptedStringConverter)
+                .HasColumnType(unlimitedEncryptedColumnType);
+            entity.Property(s => s.PhoneNumber)
+                .HasConversion(encryptedStringConverter)
+                .HasColumnType(unlimitedEncryptedColumnType);
+            entity.Property(s => s.Address)
+                .HasConversion(encryptedStringConverter)
+                .HasColumnType(unlimitedEncryptedColumnType);
             entity.Property(s => s.Rating).HasPrecision(4, 2);
             entity.Property(s => s.PerformanceScore).HasPrecision(4, 2);
             entity.Property(s => s.ApprovedBy).HasMaxLength(120);
@@ -240,9 +286,26 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
             entity.Property(e => e.BandSnapshot).HasMaxLength(20).IsRequired();
             entity.Property(e => e.ReasonsSnapshot).IsRequired();
             entity.Property(e => e.Notes).HasMaxLength(500);
-            entity.Property(e => e.CreatedUtc).HasDefaultValueSql("GETUTCDATE()");
+            entity.Property(e => e.CreatedUtc).HasDefaultValueSql(createdUtcDefaultSql);
             entity.HasIndex(e => new { e.SupplierId, e.EvaluatedAtUtc });
             entity.HasQueryFilter(e => !e.Supplier!.IsDeleted);
+        });
+
+        modelBuilder.Entity<AccessRequest>(entity =>
+        {
+            entity.Property(a => a.Email)
+                .HasConversion(encryptedStringConverter)
+                .HasColumnType(unlimitedEncryptedColumnType);
+            entity.Property(a => a.FullName)
+                .HasConversion(encryptedStringConverter)
+                .HasColumnType(unlimitedEncryptedColumnType);
+            entity.Property(a => a.Reason)
+                .HasConversion(encryptedStringConverter)
+                .HasColumnType(unlimitedEncryptedColumnType);
+            entity.Property(a => a.RejectionReason)
+                .HasConversion(encryptedStringConverter)
+                .HasColumnType(unlimitedEncryptedColumnType);
+            entity.Property(a => a.PreferredRole).HasMaxLength(100);
         });
 
         modelBuilder.Entity<RegulatoryReport>(entity =>

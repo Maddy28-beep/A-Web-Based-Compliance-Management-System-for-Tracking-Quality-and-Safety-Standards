@@ -395,6 +395,7 @@ public class ComplianceChecksController : Controller
         return RedirectToAction(nameof(Details), new { id = checkId });
     }
 
+    [Authorize(Policy = "Compliance.Read")]
     public async Task<IActionResult> Index(Guid? policyId, Guid? statusId, Guid? categoryId, Guid? riskId, string? site)
     {
         var checksQuery = _db.ComplianceChecks
@@ -479,14 +480,22 @@ public class ComplianceChecksController : Controller
             .ToListAsync();
         ViewBag.SupplierReferenceId = new SelectList(supplierOptions, "Id", "Name");
 
+        var userOptions = await GetActiveUserOptionsAsync();
+        ViewBag.UserOptions = new SelectList(userOptions, "Email", "Display");
+    }
+
+    private async Task<List<object>> GetActiveUserOptionsAsync()
+    {
         var now = DateTimeOffset.UtcNow;
-        var users = await _db.Users
+        var allUsers = await _db.Users
             .AsNoTracking()
+            .ToListAsync();
+
+        return allUsers
             .Where(u => !u.LockoutEnd.HasValue || u.LockoutEnd <= now)
             .OrderBy(u => u.FullName ?? u.Email ?? "")
-            .Select(u => new { u.Email, Display = $"{(string.IsNullOrEmpty(u.FullName) ? u.Email : u.FullName)} ({u.Email})" })
-            .ToListAsync();
-        ViewBag.UserOptions = new SelectList(users, "Email", "Display");
+            .Select(u => (object)new { u.Email, Display = $"{(string.IsNullOrEmpty(u.FullName) ? u.Email : u.FullName)} ({u.Email})" })
+            .ToList();
     }
 
     private void AddAudit(string entityName, Guid entityId, string action, string details)
@@ -497,6 +506,7 @@ public class ComplianceChecksController : Controller
             EntityId = entityId,
             Action = action,
             Actor = User.Identity?.Name ?? "system",
+            IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             TimestampUtc = DateTime.UtcNow,
             Details = details
         });

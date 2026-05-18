@@ -1,8 +1,10 @@
 @using FurniComply.Domain.Enums
 @using FurniComply.Infrastructure.Persistence
 @inject AppDbContext Db
+@inject IConfiguration Configuration
 @{
     var isAuthenticated = User.Identity?.IsAuthenticated ?? false;
+    var idleLogoutSeconds = isAuthenticated ? Configuration.GetValue("App:IdleLogoutSeconds", 0) : 0;
     var isSuperAdmin = isAuthenticated && User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.SuperAdmin);
     var isAdmin = isAuthenticated && !isSuperAdmin && User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.Admin);
     var isComplianceManager = isAuthenticated && !isSuperAdmin && User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.ComplianceManager);
@@ -11,31 +13,31 @@
     var isAuditor = isAuthenticated && User.IsInRole(FurniComply.Infrastructure.Identity.RoleNames.Auditor);
 
     var canViewPolicies = isSuperAdmin || isAdmin || isComplianceManager || isDepartmentHead || isAuditor;
-    var canViewCompliance = isAdmin || isComplianceManager || isDepartmentHead || isAuditor;
-    var canViewChecks = isAdmin || isComplianceManager || isDepartmentHead || isAuditor;
+    var canViewCompliance = isSuperAdmin || isAdmin || isComplianceManager || isDepartmentHead || isAuditor;
+    var canViewChecks = isSuperAdmin || isAdmin || isComplianceManager || isDepartmentHead || isAuditor;
     var canViewCapa = canViewChecks;
 
-    var canViewProcurement = isAdmin || isProcurement;
-    var canViewOrders = isAdmin || isProcurement;
-    var canViewSuppliers = isAdmin || isComplianceManager || isProcurement;
-    var canViewSupplierDocuments = isAdmin || isComplianceManager || isProcurement;
+    var canViewProcurement = isSuperAdmin || isAdmin || isComplianceManager || isProcurement;
+    var canViewOrders = canViewProcurement;
+    var canViewSuppliers = isSuperAdmin || isAdmin || isComplianceManager || isProcurement;
+    var canViewSupplierDocuments = canViewSuppliers;
 
-    var canViewReportsCenter = isSuperAdmin || isAdmin || isComplianceManager;
-    var canViewRegulatoryReports = isSuperAdmin || isAdmin || isComplianceManager;
-    var canViewAuditLogs = isSuperAdmin || isAdmin || isComplianceManager;
+    var canViewReportsCenter = isSuperAdmin || isAdmin || isComplianceManager || isDepartmentHead || isAuditor;
+    var canViewRegulatoryReports = canViewReportsCenter;
+    var canViewAuditLogs = isSuperAdmin || isAdmin || isComplianceManager || isDepartmentHead || isAuditor || isProcurement;
 
     var canViewMasterData = isSuperAdmin || isAdmin;
-    var canViewSettings = isSuperAdmin;
-    var canViewAlertRules = false;
+    var canViewSettings = isSuperAdmin || isAdmin;
+    var canViewAlertRules = isSuperAdmin || isAdmin;
 
     var showGovernanceSection = canViewPolicies || canViewCompliance || canViewChecks;
     var showSupplyChainSection = canViewProcurement || canViewSuppliers || canViewSupplierDocuments || canViewOrders;
     var showReportingSection = canViewReportsCenter || canViewRegulatoryReports || canViewAuditLogs;
     var showAdministrationSection = canViewMasterData || canViewSettings || canViewAlertRules;
-    var canApprovePolicies = isAdmin;
-    var canApproveSuppliers = isAdmin;
-    var canApproveReports = isAdmin;
-    var canApproveOrders = isAdmin;
+    var canApprovePolicies = isSuperAdmin || isAdmin;
+    var canApproveSuppliers = isSuperAdmin || isAdmin;
+    var canApproveReports = isSuperAdmin || isAdmin;
+    var canApproveOrders = isSuperAdmin || isAdmin;
     var pendingSupplierApprovals = 0;
     var pendingPolicyApprovals = 0;
     var pendingReportApprovals = 0;
@@ -104,7 +106,7 @@
     <link rel="stylesheet" href="~/FurniComply.Web.styles.css" asp-append-version="true" />
     @RenderSection("Styles", required: false)
 </head>
-<body>
+<body data-idle-logout-seconds="@idleLogoutSeconds">
     <a class="skip-link" href="#maincontent">Skip to content</a>
     <div class="erp-shell @(isAuthenticated ? "" : "no-sidebar")">
         @if (isAuthenticated)
@@ -131,7 +133,14 @@
                             <span class="sidebar-badge">@pendingTotalApprovals</span>
                         }
                     </a>
-                    <a asp-controller="Search" asp-action="Index"><i class="fa-solid fa-magnifying-glass"></i> Global Search</a>
+                    <a asp-controller="QRCode" asp-action="Index">
+                        <i class="fa-solid fa-qrcode"></i>
+                        <span class="sidebar-link-label">My QR Code</span>
+                    </a>
+                    @if (canViewPolicies || canViewCompliance || canViewProcurement || canViewReportsCenter || canViewAuditLogs)
+                    {
+                        <a asp-controller="Search" asp-action="Index"><i class="fa-solid fa-magnifying-glass"></i> Global Search</a>
+                    }
 
                     @if (showGovernanceSection)
                     {
@@ -239,6 +248,7 @@
                     @if (canViewAuditLogs)
                     {
                         <a asp-controller="AuditLogs" asp-action="Index"><i class="fa-solid fa-list-check"></i> Audit Logs</a>
+                        <a asp-controller="SecurityLogs" asp-action="Index"><i class="fa-solid fa-user-shield"></i> Security Logs</a>
                         @if (isSuperAdmin)
                         {
                             <a asp-controller="AuditLogs" asp-action="Overrides">
@@ -259,6 +269,7 @@
                     @if (canViewSettings)
                     {
                         <a asp-controller="Admin" asp-action="Users"><i class="fa-solid fa-gear"></i> Settings</a>
+                        <a asp-controller="Admin" asp-action="Backups"><i class="fa-solid fa-database"></i> Database Backups</a>
                     }
                     @if (canViewAlertRules)
                     {
@@ -327,6 +338,8 @@
                                 </span>
                             </button>
                             <div class="profile-dropdown">
+                                <a asp-controller="Account" asp-action="Security"><i class="fa-solid fa-shield-halved me-1"></i> Two-Factor Auth</a>
+                                <div class="dropdown-divider"></div>
                                 <form asp-controller="Account" asp-action="Logout" method="post" class="logout-form" id="quickLogoutForm">
                                     <button type="submit" class="logout-button">
                                         <span>Logout</span>
@@ -340,18 +353,7 @@
             }
 
             <main role="main" class="erp-content" id="maincontent">
-                @{
-                    try
-                    {
-                        @RenderBody()
-                    }
-                    catch (Exception ex)
-                    {
-                        <div class="alert alert-danger">
-                            <strong>Page render error:</strong> @ex.Message
-                        </div>
-                    }
-                }
+                @RenderBody()
             </main>
 
             <footer>
@@ -370,30 +372,34 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <script src="~/js/site.js" asp-append-version="true"></script>
-    <script>
-        $(document).ready(function () {
-            // Auto-upgrade selects to searchable dropdowns unless explicitly opted out.
-            const selector = "select:not(.no-select2):not(.js-no-select2):not(.select2-hidden-accessible):not([multiple]):not([data-select2='off'])";
-            $(selector).each(function () {
-                const $select = $(this);
 
-                if ($select.closest('.dataTables_length').length > 0 || $select.is('[hidden]')) {
-                    return;
-                }
+    @section Scripts {
+        <script>
+            $(document).ready(function () {
+                // Auto-upgrade selects to searchable dropdowns unless explicitly opted out.
+                const selector = "select:not(.no-select2):not(.js-no-select2):not(.select2-hidden-accessible):not([multiple]):not([data-select2='off'])";
+                $(selector).each(function () {
+                    const $select = $(this);
 
-                const hasEmptyOption = $select.find('option[value=""]').length > 0;
-                const isRequired = $select.prop('required') === true;
+                    if ($select.closest('.dataTables_length').length > 0 || $select.is('[hidden]')) {
+                        return;
+                    }
 
-                $select.select2({
-                    width: '100%',
-                    placeholder: $select.attr('data-placeholder') || 'Search or select...',
-                    allowClear: hasEmptyOption && !isRequired,
-                    dropdownAutoWidth: false,
-                    dropdownParent: $(document.body)
+                    const hasEmptyOption = $select.find('option[value=""]').length > 0;
+                    const isRequired = $select.prop('required') === true;
+
+                    $select.select2({
+                        width: '100%',
+                        placeholder: $select.attr('data-placeholder') || 'Search or select...',
+                        allowClear: hasEmptyOption && !isRequired,
+                        dropdownAutoWidth: false,
+                        dropdownParent: $(document.body)
+                    });
                 });
             });
-        });
-    </script>
+        }
+        </script>
+    }
     @await RenderSectionAsync("Scripts", required: false)
     <partial name="_Notifications" />
 </body>

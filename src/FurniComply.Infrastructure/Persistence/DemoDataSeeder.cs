@@ -70,14 +70,14 @@ public static class DemoDataSeeder
         string safetyName = "Elena Adarna";
         string sustainabilityName = "Antonio Luna";
 
-        // 4. Seed exactly 5 Filipino Suppliers
+        // 4. Seed exactly 5 Filipino Suppliers (Address is required in local SQLite schema)
         var suppliers = new List<Supplier>
         {
-            new Supplier { Id = Guid.NewGuid(), SupplierCategoryId = rawSuppCat.Id, Name = "Bayanihan Timber Co.", Code = "SUP-PH-001", ContactEmail = "bayanihan@timber.ph", Status = SupplierStatus.Active, Rating = 4.8m, Certifications = "FSC, ISO 9001", ApprovalStatus = SupplierApprovalStatus.Approved, RenewalDueUtc = now.AddMonths(6) },
-            new Supplier { Id = Guid.NewGuid(), SupplierCategoryId = hardSuppCat.Id, Name = "Sikatuna Hardware Solutions", Code = "SUP-PH-002", ContactEmail = "sikatuna@hardware.ph", Status = SupplierStatus.OnHold, Rating = 3.2m, Certifications = "ISO 14001", ApprovalStatus = SupplierApprovalStatus.Approved, RenewalDueUtc = now.AddDays(-5) },
-            new Supplier { Id = Guid.NewGuid(), SupplierCategoryId = finishSuppCat.Id, Name = "Maharlika Coatings & Finishes", Code = "SUP-PH-003", ContactEmail = "maharlika@coatings.ph", Status = SupplierStatus.Active, Rating = 4.7m, Certifications = "REACH, RoHS", ApprovalStatus = SupplierApprovalStatus.Approved, RenewalDueUtc = now.AddYears(1) },
-            new Supplier { Id = Guid.NewGuid(), SupplierCategoryId = packSuppCat.Id, Name = "Malasakit Packaging Group", Code = "SUP-PH-004", ContactEmail = "malasakit@packaging.ph", Status = SupplierStatus.Active, Rating = 4.0m, Certifications = "DTI Certified", ApprovalStatus = SupplierApprovalStatus.Approved, RenewalDueUtc = now.AddMonths(8) },
-            new Supplier { Id = Guid.NewGuid(), SupplierCategoryId = packSuppCat.Id, Name = "Agila Logistics Services", Code = "SUP-PH-005", ContactEmail = "agila@logistics.ph", Status = SupplierStatus.Suspended, Rating = 1.8m, Certifications = "None", ApprovalStatus = SupplierApprovalStatus.Rejected }
+            new Supplier { Id = Guid.NewGuid(), SupplierCategoryId = rawSuppCat.Id, Name = "Bayanihan Timber Co.", Code = "SUP-PH-001", ContactEmail = "bayanihan@timber.ph", PhoneNumber = "+63 917 100 0001", Address = DemoAddress("Km 42 Timber Industrial Park", "San Roque", "Laguna"), Status = SupplierStatus.Active, Rating = 4.8m, Certifications = "FSC, ISO 9001", ApprovalStatus = SupplierApprovalStatus.Approved, RenewalDueUtc = now.AddMonths(6) },
+            new Supplier { Id = Guid.NewGuid(), SupplierCategoryId = hardSuppCat.Id, Name = "Sikatuna Hardware Solutions", Code = "SUP-PH-002", ContactEmail = "sikatuna@hardware.ph", PhoneNumber = "+63 918 200 0002", Address = DemoAddress("12 Rizal Avenue", "Poblacion", "Cebu"), Status = SupplierStatus.OnHold, Rating = 3.2m, Certifications = "ISO 14001", ApprovalStatus = SupplierApprovalStatus.Approved, RenewalDueUtc = now.AddDays(-5) },
+            new Supplier { Id = Guid.NewGuid(), SupplierCategoryId = finishSuppCat.Id, Name = "Maharlika Coatings & Finishes", Code = "SUP-PH-003", ContactEmail = "maharlika@coatings.ph", PhoneNumber = "+63 919 300 0003", Address = DemoAddress("88 Export Processing Zone Road", "Bagong Silang", "Bulacan"), Status = SupplierStatus.Active, Rating = 4.7m, Certifications = "REACH, RoHS", ApprovalStatus = SupplierApprovalStatus.Approved, RenewalDueUtc = now.AddYears(1) },
+            new Supplier { Id = Guid.NewGuid(), SupplierCategoryId = packSuppCat.Id, Name = "Malasakit Packaging Group", Code = "SUP-PH-004", ContactEmail = "malasakit@packaging.ph", PhoneNumber = "+63 920 400 0004", Address = DemoAddress("5 Packaging Lane", "San Antonio", "Pampanga"), Status = SupplierStatus.Active, Rating = 4.0m, Certifications = "DTI Certified", ApprovalStatus = SupplierApprovalStatus.Approved, RenewalDueUtc = now.AddMonths(8) },
+            new Supplier { Id = Guid.NewGuid(), SupplierCategoryId = packSuppCat.Id, Name = "Agila Logistics Services", Code = "SUP-PH-005", ContactEmail = "agila@logistics.ph", PhoneNumber = "+63 921 500 0005", Address = DemoAddress("Port Area Warehouse 3", "Tambo", "Parañaque"), Status = SupplierStatus.Suspended, Rating = 1.8m, Certifications = "None", ApprovalStatus = SupplierApprovalStatus.Rejected }
         };
         await db.Suppliers.AddRangeAsync(suppliers);
         await db.SaveChangesAsync();
@@ -262,6 +262,9 @@ public static class DemoDataSeeder
         return await db.PolicyCategories.FirstOrDefaultAsync(c => c.Name.Contains(name))
             ?? (await db.PolicyCategories.AddAsync(new PolicyCategory { Id = Guid.NewGuid(), Name = name })).Entity;
     }
+
+    private static string DemoAddress(string street, string barangay, string province) =>
+        $"{street}, {barangay}, {province}";
 
     private static async Task<SupplierCategory> GetSupplierCategory(AppDbContext db, string name)
     {

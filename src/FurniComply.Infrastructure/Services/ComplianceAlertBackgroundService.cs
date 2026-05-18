@@ -29,12 +29,19 @@ public sealed class ComplianceAlertBackgroundService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await RefreshAlertsAsync(stoppingToken);
-
-        using var timer = new PeriodicTimer(RefreshInterval);
-        while (await timer.WaitForNextTickAsync(stoppingToken))
+        try
         {
             await RefreshAlertsAsync(stoppingToken);
+
+            using var timer = new PeriodicTimer(RefreshInterval);
+            while (await timer.WaitForNextTickAsync(stoppingToken))
+            {
+                await RefreshAlertsAsync(stoppingToken);
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Normal shutdown when the host stops or the app is closed in Visual Studio.
         }
     }
 

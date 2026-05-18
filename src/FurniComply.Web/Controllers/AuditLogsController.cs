@@ -2,6 +2,7 @@ using System;
 using System.Text;
 using System.Linq;
 using System.Threading.Tasks;
+using FurniComply.Infrastructure.Identity;
 using FurniComply.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -12,6 +13,12 @@ namespace FurniComply.Web.Controllers;
 [Authorize(Policy = "Audit.Read")]
 public class AuditLogsController : Controller
 {
+    private static readonly string[] ExcludedSecurityActions =
+    {
+        "Login Succeeded",
+        "Login Failed"
+    };
+
     private readonly AppDbContext _db;
 
     public AuditLogsController(AppDbContext db)
@@ -19,9 +26,9 @@ public class AuditLogsController : Controller
         _db = db;
     }
 
-    public async Task<IActionResult> Index(string? actor, string? entity, string? auditAction, DateTime? from, DateTime? to)
+    public async Task<IActionResult> Index(string? actor, string? entity, string? auditAction, string? ipAddress, DateTime? from, DateTime? to)
     {
-        var query = _db.AuditLogs.AsQueryable();
+        var query = ApplyDisplayedAuditLogs(ApplyRoleScope(_db.AuditLogs.AsQueryable()));
 
         if (!string.IsNullOrWhiteSpace(actor))
         {
@@ -36,6 +43,11 @@ public class AuditLogsController : Controller
         if (!string.IsNullOrWhiteSpace(auditAction))
         {
             query = query.Where(a => a.Action == auditAction);
+        }
+
+        if (!string.IsNullOrWhiteSpace(ipAddress))
+        {
+            query = query.Where(a => a.IpAddress == ipAddress);
         }
 
         if (from.HasValue)
@@ -56,20 +68,30 @@ public class AuditLogsController : Controller
         ViewBag.Actor = actor;
         ViewBag.Entity = entity;
         ViewBag.AuditAction = auditAction;
+        ViewBag.IpAddress = ipAddress;
         ViewBag.From = from?.ToString("yyyy-MM-dd");
         ViewBag.To = to?.ToString("yyyy-MM-dd");
-        ViewBag.Actors = await _db.AuditLogs
+        ViewBag.IsScopedToCurrentUser = IsCurrentUserScoped();
+        ViewBag.CanViewSensitiveFields = CanViewSensitiveFields();
+        var scopedQuery = ApplyDisplayedAuditLogs(ApplyRoleScope(_db.AuditLogs.AsQueryable()));
+        ViewBag.Actors = await scopedQuery
             .Select(a => a.Actor)
             .Distinct()
             .OrderBy(a => a)
             .ToListAsync();
-        ViewBag.Entities = await _db.AuditLogs
+        ViewBag.Entities = await scopedQuery
             .Select(a => a.EntityName)
             .Distinct()
             .OrderBy(a => a)
             .ToListAsync();
-        ViewBag.Actions = await _db.AuditLogs
+        ViewBag.Actions = await scopedQuery
             .Select(a => a.Action)
+            .Distinct()
+            .OrderBy(a => a)
+            .ToListAsync();
+        ViewBag.IpAddresses = await scopedQuery
+            .Where(a => !string.IsNullOrWhiteSpace(a.IpAddress))
+            .Select(a => a.IpAddress)
             .Distinct()
             .OrderBy(a => a)
             .ToListAsync();
@@ -77,6 +99,7 @@ public class AuditLogsController : Controller
         return View(logs);
     }
 
+    [Authorize(Policy = "System.Admin")]
     public async Task<IActionResult> Overrides(DateTime? from, DateTime? to)
     {
         var overrideActions = new[] 
@@ -91,7 +114,7 @@ public class AuditLogsController : Controller
             "Place Order Override (Documents)"
         };
 
-        var query = _db.AuditLogs.AsQueryable();
+        var query = ApplyDisplayedAuditLogs(ApplyRoleScope(_db.AuditLogs.AsQueryable()));
         query = query.Where(a => overrideActions.Contains(a.Action) || a.Action.Contains("Override"));
 
         if (from.HasValue)
@@ -114,17 +137,20 @@ public class AuditLogsController : Controller
         ViewBag.To = to?.ToString("yyyy-MM-dd");
 
         // Populate selects for the Index view to work correctly
-        ViewBag.Actors = await _db.AuditLogs
+        ViewBag.IsScopedToCurrentUser = IsCurrentUserScoped();
+        ViewBag.CanViewSensitiveFields = CanViewSensitiveFields();
+        var scopedQuery = ApplyDisplayedAuditLogs(ApplyRoleScope(_db.AuditLogs.AsQueryable()));
+        ViewBag.Actors = await scopedQuery
             .Select(a => a.Actor)
             .Distinct()
             .OrderBy(a => a)
             .ToListAsync();
-        ViewBag.Entities = await _db.AuditLogs
+        ViewBag.Entities = await scopedQuery
             .Select(a => a.EntityName)
             .Distinct()
             .OrderBy(a => a)
             .ToListAsync();
-        ViewBag.Actions = await _db.AuditLogs
+        ViewBag.Actions = await scopedQuery
             .Select(a => a.Action)
             .Distinct()
             .OrderBy(a => a)
@@ -135,19 +161,20 @@ public class AuditLogsController : Controller
 
     public async Task<IActionResult> Details(Guid id)
     {
-        var log = await _db.AuditLogs.FirstOrDefaultAsync(a => a.Id == id);
+        var log = await ApplyRoleScope(_db.AuditLogs.AsQueryable()).FirstOrDefaultAsync(a => a.Id == id);
         if (log == null)
         {
             return NotFound();
         }
 
+        ViewBag.CanViewSensitiveFields = CanViewSensitiveFields();
         return View(log);
     }
 
     [Authorize(Policy = "Audit.Export")]
     public async Task<IActionResult> ExportCsv(DateTime? from, DateTime? to)
     {
-        var query = _db.AuditLogs.AsQueryable();
+        var query = ApplyDisplayedAuditLogs(ApplyRoleScope(_db.AuditLogs.AsQueryable()));
 
         if (from.HasValue)
         {
@@ -165,12 +192,13 @@ public class AuditLogsController : Controller
             .ToListAsync();
 
         var csv = new StringBuilder();
-        csv.AppendLine("TimestampUtc,Actor,Action,EntityName,EntityId,Details");
+        csv.AppendLine("TimestampUtc,Actor,IpAddress,Action,EntityName,EntityId,Details");
         foreach (var log in logs)
         {
             csv
                 .Append(EscapeCsv(log.TimestampUtc.ToString("O"))).Append(',')
                 .Append(EscapeCsv(log.Actor)).Append(',')
+                .Append(EscapeCsv(log.IpAddress)).Append(',')
                 .Append(EscapeCsv(log.Action)).Append(',')
                 .Append(EscapeCsv(log.EntityName)).Append(',')
                 .Append(EscapeCsv(log.EntityId.ToString())).Append(',')
@@ -192,4 +220,31 @@ public class AuditLogsController : Controller
 
         return $"\"{safe.Replace("\"", "\"\"")}\"";
     }
+
+    private IQueryable<Domain.Entities.AuditLog> ApplyRoleScope(IQueryable<Domain.Entities.AuditLog> query)
+    {
+        if (HasFullAuditVisibility())
+        {
+            return query;
+        }
+
+        var actor = User.Identity?.Name ?? string.Empty;
+        return string.IsNullOrWhiteSpace(actor)
+            ? query.Where(_ => false)
+            : query.Where(log => log.Actor == actor);
+    }
+
+    private bool HasFullAuditVisibility() =>
+        User.IsInRole(RoleNames.SuperAdmin) ||
+        User.IsInRole(RoleNames.Admin) ||
+        User.IsInRole(RoleNames.ComplianceManager) ||
+        User.IsInRole(RoleNames.Auditor);
+
+    private bool IsCurrentUserScoped() => !HasFullAuditVisibility();
+
+    private bool CanViewSensitiveFields() => HasFullAuditVisibility();
+
+    private static IQueryable<Domain.Entities.AuditLog> ApplyDisplayedAuditLogs(
+        IQueryable<Domain.Entities.AuditLog> query) =>
+        query.Where(log => !ExcludedSecurityActions.Contains(log.Action));
 }

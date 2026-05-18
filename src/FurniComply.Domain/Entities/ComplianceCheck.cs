@@ -15,5 +15,7 @@ public class ComplianceCheck : BaseEntity
     public Guid RiskLevelId { get; set; }
     public RiskLevel? RiskLevel { get; set; }
     public DateTime CheckedAtUtc { get; set; } = DateTime.UtcNow;
+
+    [StringLength(2000, ErrorMessage = "Notes cannot exceed 2000 characters.")]
     public string Notes { get; set; } = string.Empty;
 }

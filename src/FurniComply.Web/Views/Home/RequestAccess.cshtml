@@ -1,15 +1,62 @@
+@model FurniComply.Web.Models.RequestAccessViewModel
 @{
     ViewData["Title"] = "Request Access";
+    var success = TempData["RequestAccessSuccess"] as bool? == true;
 }
 
 <section class="hero">
     <div>
         <p class="eyebrow">FurniComply</p>
         <h1>Request Access</h1>
-        <p class="lede">Public self-registration is disabled. Contact your system administrator to provision an account.</p>
+        @if (success)
+        {
+            <div class="alert alert-success" role="alert">
+                <i class="fa-solid fa-check-circle"></i> Your access request has been submitted. An administrator will review it and contact you.
+            </div>
+        }
+        else
+        {
+            <p class="lede">Submit a request to get access to the FurniComply compliance management system. An administrator will review and approve your request.</p>
+            <form asp-action="RequestAccess" method="post" class="request-form">
+                @Html.AntiForgeryToken()
+                <div asp-validation-summary="All" class="validation"></div>
+                <div class="field">
+                    <label asp-for="Email">Work Email</label>
+                    <input asp-for="Email" placeholder="you@company.com" />
+                </div>
+                <div class="field">
+                    <label asp-for="FullName">Full Name</label>
+                    <input asp-for="FullName" placeholder="Your full name" />
+                </div>
+                <div class="field">
+                    <label asp-for="Reason">Reason for Access (optional)</label>
+                    <textarea asp-for="Reason" rows="3" placeholder="Briefly describe why you need access..."></textarea>
+                </div>
+                <div class="field">
+                    <label asp-for="PreferredRole">Preferred Role (optional)</label>
+                    <select asp-for="PreferredRole">
+                        <option value="">-- Select --</option>
+                        <option value="Procurement">Procurement</option>
+                        <option value="ComplianceManager">Compliance Manager</option>
+                        <option value="DepartmentHead">Department Head</option>
+                        <option value="Auditor">Auditor</option>
+                    </select>
+                </div>
+                <button type="submit" class="button primary">Submit Request</button>
+            </form>
+        }
     </div>
     <div class="hero-actions">
         <a class="button primary" href="/Account/Login"><i class="fa-solid fa-arrow-left"></i> Back to Login</a>
     </div>
 </section>
 
+<style>
+    .request-form { max-width: 480px; margin-top: 1.5rem; }
+    .request-form .field { margin-bottom: 1rem; }
+    .request-form label { display: block; font-weight: 600; margin-bottom: 0.35rem; }
+    .request-form input, .request-form textarea, .request-form select {
+        width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #ccc; border-radius: 6px;
+    }
+    .request-form .validation { color: #c00; margin-bottom: 0.75rem; }
+</style>

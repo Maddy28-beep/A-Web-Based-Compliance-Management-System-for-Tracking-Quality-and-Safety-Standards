@@ -16,11 +16,13 @@ public class SupplierManagementService : ISupplierManagementService
 {
     private readonly AppDbContext _db;
     private readonly ISupplierPerformanceService _performance;
+    private readonly IHttpContextAccessor _httpContextAccessor;
 
-    public SupplierManagementService(AppDbContext db, ISupplierPerformanceService performance)
+    public SupplierManagementService(AppDbContext db, ISupplierPerformanceService performance, IHttpContextAccessor httpContextAccessor)
     {
         _db = db;
         _performance = performance;
+        _httpContextAccessor = httpContextAccessor;
     }
 
     public async Task<List<SupplierTimelineItem>> BuildSupplierTimelineAsync(Guid supplierId, string supplierName, Func<string, string, object, string?> urlHelper)
@@ -385,6 +387,7 @@ public class SupplierManagementService : ISupplierManagementService
             EntityId = document.Id,
             Action = "Edit",
             Actor = actorName ?? "system",
+            IpAddress = _httpContextAccessor.HttpContext?.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             TimestampUtc = DateTime.UtcNow,
             Details = $"Updated document {documentType}."
         });
